@@ -12,7 +12,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--ink:#0C0C0E;--ink-2:#18181C;--ink-3:#26262E;--muted:#52525E;--subtle:#A0A0B0;--white:#F6F6FF;--gold:#D4A843;--gold-lt:#F5C842;--gold-dk:#9A7420;--red:#E84040;--green:#2DBE6C;--blue:#3B7EF8;--font-display:'Bebas Neue',sans-serif;--font-body:'DM Sans',sans-serif;--font-mono:'DM Mono',monospace;--radius:6px;--radius-lg:16px;--shadow:0 4px 24px rgba(0,0,0,.45);--shadow-lg:0 16px 64px rgba(0,0,0,.65);--ease-expo:cubic-bezier(0.16,1,0.3,1)}
 body{font-family:var(--font-body);background:var(--ink);color:var(--white);min-height:100vh;overflow-x:hidden;cursor:none}
-#cursor{position:fixed;top:0;left:0;z-index:9999;pointer-events:none;mix-blend-mode:differe nce}
+#cursor{position:fixed;top:0;left:0;z-index:9999;pointer-events:none;mix-blend-mode:difference}
 #cursor-ring{width:36px;height:36px;border:1.5px solid var(--white);border-radius:50%;position:absolute;top:-18px;left:-18px;transition:all .25s var(--ease-expo)}
 #cursor-dot{width:5px;height:5px;background:var(--gold);border-radius:50%;position:absolute;top:-2.5px;left:-2.5px}
 body.cursor-hover #cursor-ring{width:60px;height:60px;top:-30px;left:-30px;border-color:var(--gold)}
@@ -119,7 +119,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;background-im
 @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
 .empty-state{text-align:center;padding:5rem 2rem;color:var(--muted);grid-column:1/-1}
 .hidden{display:none}
-/* NEW: Activity Feed Styles */
 .activity-item{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--ink-3);animation:slideIn .3s ease}
 .activity-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .activity-bid{background:rgba(45,190,108,.15);color:var(--green)}
@@ -127,11 +126,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;background-im
 .activity-text{flex:1;font-size:.85rem}
 .activity-time{font-size:.65rem;color:var(--muted);margin-top:4px}
 @keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
-/* Chart Container */
 .chart-container{background:var(--ink-2);border-radius:var(--radius-lg);padding:1.5rem;margin-bottom:2rem}
 .live-badge-pulse{display:inline-flex;align-items:center;gap:6px;background:var(--red);padding:4px 10px;border-radius:100px;font-size:.65rem;animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-/* Notification Permission */
 .notify-btn{background:rgba(212,168,67,.15);border:1px solid var(--gold-dk);border-radius:100px;padding:6px 12px;font-size:.7rem;cursor:pointer}
 @media(max-width:1024px){.hero-main{grid-template-columns:1fr}.hero-right{display:none}.grid-3,.grid-4{grid-template-columns:repeat(2,1fr)}.modal-grid{grid-template-columns:1fr}}
 @media(max-width:768px){#nav{padding:0 1.5rem}.container{padding:0 1.5rem}.hero-left{padding:4rem 1.5rem}.grid-3,.grid-4{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}}
@@ -184,7 +181,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;background-im
 <div class="grid-4" id="marketplaceGrid"></div></div></div>
 
 <div id="dashboardPage" class="page"><div style="padding:3rem"><div class="section-header"><div><div class="section-title">Dashboard</div><div class="section-sub" id="dashGreeting">Welcome back</div><button id="enableNotifications" class="notify-btn" onclick="requestNotificationPermission()">🔔 Enable Notifications</button></div><button class="btn btn-gold btn-sm" onclick="nav('create')">+ New Auction</button></div>
-<!-- NEW: Analytics Chart -->
 <div class="chart-container"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-weight:600">📊 Bid Activity Analytics</span><span class="live-badge-pulse"><span class="live-dot"></span> LIVE</span></div><canvas id="bidsChart" height="200"></canvas></div>
 <div class="grid-4" id="kpiGrid" style="margin-bottom:2rem"></div>
 <div class="grid-2" style="margin-bottom:2rem"><div class="panel" style="background:var(--ink-2);padding:1.5rem;border-radius:var(--radius-lg)"><div style="font-weight:600;margin-bottom:1rem;display:flex;justify-content:space-between"><span>🔥 Live Activity Feed</span><span style="font-size:.65rem;color:var(--muted)">Real-time updates</span></div><div id="activityFeed" style="max-height:300px;overflow-y:auto"></div></div>
@@ -224,14 +220,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;background-im
 <div class="modal-overlay" id="productModal"><div class="modal-box"><div class="modal-grid"><div class="modal-img-side" id="modalImg">📦</div><div class="modal-info-side"><div class="modal-price" id="modalPrice">—</div><div id="modalStatus"></div><p id="modalDesc" style="margin:1rem 0;color:var(--subtle)"></p><div class="bid-input-row hidden" id="bidSection"><input type="number" class="bid-input" id="bidAmount" placeholder="Enter bid"><button class="btn btn-gold" onclick="submitBid()">Place Bid</button></div><div id="modalBidHistory"></div><button class="btn btn-ghost btn-sm" onclick="closeModal()" style="margin-top:1rem">Close</button></div></div></div></div>
 
 <script>
-// ========== FIXED: CORRECT localStorage keys ==========
-
+// ========== STATE ==========
 let activityFeed = [];
 let bidsChart = null;
 let notificationPermission = false;
 let state = { user: null, token: null, products: [], watchlist: new Set(), socket: null };
 
-// ========== HELPER FUNCTIONS ==========
+// ========== HELPERS ==========
 function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
 
 function toast(msg, type) { 
@@ -250,21 +245,16 @@ async function apiCall(endpoint, opts) {
   return res.json(); 
 }
 
-// ========== FIXED: CORRECT localStorage keys ==========
+// ========== AUTH ==========
 function checkAuth() { 
-  var t = localStorage.getItem('token');   // ✅ FIXED: 'token' not 'bv_token'
-  var u = localStorage.getItem('user');    // ✅ FIXED: 'user' not 'bv_user'
-  
-  console.log('🔍 checkAuth - Token exists:', !!t);
-  
+  var t = localStorage.getItem('token');
+  var u = localStorage.getItem('user');
   if (t && u) { 
     state.token = t; 
     state.user = JSON.parse(u); 
     showUserUI(); 
     loadProducts(); 
-    if (document.getElementById('heroPage').classList.contains('active')) {
-      nav('dashboard');
-    }
+    if (document.getElementById('heroPage').classList.contains('active')) nav('dashboard');
   } else { 
     showGuestUI();
   } 
@@ -277,7 +267,6 @@ function showGuestUI() {
 }
 
 function showUserUI() { 
-  console.log('🎨 Showing user UI for:', state.user?.name);
   document.getElementById('navRight').classList.add('hidden'); 
   document.getElementById('navUser').classList.remove('hidden'); 
   document.getElementById('navCenter').style.display = 'flex'; 
@@ -287,8 +276,8 @@ function showUserUI() {
 }
 
 function logout() { 
-  localStorage.removeItem('token');    // ✅ FIXED
-  localStorage.removeItem('user');     // ✅ FIXED
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
   state.token = null; 
   state.user = null; 
   if(state.socket) state.socket.disconnect(); 
@@ -299,73 +288,55 @@ function logout() {
 }
 
 async function doLogin(email, pw) { 
-  var data = await apiCall('/auth/login', { 
-    method: 'POST', 
-    body: JSON.stringify({ email: email, password: pw }) 
-  }); 
+  var data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email: email, password: pw }) }); 
   if (data.success) { 
     state.token = data.token; 
     state.user = data.user; 
-    localStorage.setItem('token', data.token);      // ✅ Saves as 'token'
-    localStorage.setItem('user', JSON.stringify(data.user)); // ✅ Saves as 'user'
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
     showUserUI(); 
     loadProducts(); 
     nav('dashboard'); 
     toast('Welcome back!', 'success'); 
     connectSocket(); 
-    addActivity(`${state.user.name} logged in`, 'product'); 
+    addActivity(state.user.name + ' logged in', 'product'); 
   } else { 
     toast(data.message || 'Login failed', 'error'); 
   } 
 }
 
 async function doSignup(name, email, pw) { 
-  var data = await apiCall('/auth/signup', { 
-    method: 'POST', 
-    body: JSON.stringify({ name: name, email: email, password: pw }) 
-  }); 
+  var data = await apiCall('/auth/signup', { method: 'POST', body: JSON.stringify({ name: name, email: email, password: pw }) }); 
   if (data.success) { 
     state.token = data.token; 
     state.user = data.user; 
-    localStorage.setItem('token', data.token); 
-    localStorage.setItem('user', JSON.stringify(data.user)); 
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
     showUserUI(); 
     loadProducts(); 
     nav('dashboard'); 
     toast('Account created!', 'success'); 
     connectSocket(); 
-    addActivity(`${name} joined BidVault`, 'product'); 
+    addActivity(name + ' joined BidVault', 'product'); 
   } else { 
     toast(data.message || 'Signup failed', 'error'); 
   } 
 }
 
-// ========== ACTIVITY FEED ==========
-function addActivity(message, type, amount = null) {
-  const activity = { id: Date.now(), message: message, type: type, amount: amount, time: new Date() };
-  activityFeed.unshift(activity);
+// ========== ACTIVITY ==========
+function addActivity(message, type, amount) {
+  activityFeed.unshift({ id: Date.now(), message: message, type: type, amount: amount, time: new Date() });
   if (activityFeed.length > 20) activityFeed.pop();
-  renderActivityFeed();
-}
-
-function renderActivityFeed() {
-  const container = document.getElementById('activityFeed');
+  var container = document.getElementById('activityFeed');
   if (!container) return;
-  if (activityFeed.length === 0) {
-    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:1rem">No activity yet</p>';
-    return;
-  }
-  container.innerHTML = activityFeed.map(a => `
-    <div class="activity-item">
-      <div class="activity-icon activity-${a.type === 'bid' ? 'bid' : 'product'}">${a.type === 'bid' ? '💰' : '📦'}</div>
-      <div class="activity-text"><div>${escapeHtml(a.message)}</div><div class="activity-time">${timeAgo(a.time)}</div></div>
-      ${a.amount ? `<div style="color:var(--gold);font-weight:600">$${a.amount.toLocaleString()}</div>` : ''}
-    </div>
-  `).join('');
+  if (activityFeed.length === 0) { container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:1rem">No activity yet</p>'; return; }
+  container.innerHTML = activityFeed.map(function(a) {
+    return '<div class="activity-item"><div class="activity-icon activity-' + (a.type === 'bid' ? 'bid' : 'product') + '">' + (a.type === 'bid' ? '💰' : '📦') + '</div><div class="activity-text"><div>' + escapeHtml(a.message) + '</div><div class="activity-time">' + timeAgo(a.time) + '</div></div>' + (a.amount ? '<div style="color:var(--gold);font-weight:600">$' + a.amount.toLocaleString() + '</div>' : '') + '</div>';
+  }).join('');
 }
 
 function timeAgo(date) {
-  const diff = Date.now() - new Date(date);
+  var diff = Date.now() - new Date(date);
   if (diff < 60000) return 'just now';
   if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
   if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
@@ -374,30 +345,23 @@ function timeAgo(date) {
 
 // ========== CHART ==========
 function initChart() {
-  const ctx = document.getElementById('bidsChart')?.getContext('2d');
+  var ctx = document.getElementById('bidsChart')?.getContext('2d');
   if (!ctx) return;
   bidsChart = new Chart(ctx, {
     type: 'line',
-    data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Bids Activity', data: [12, 19, 15, 27, 22, 34, 45], borderColor: '#D4A843', backgroundColor: 'rgba(212, 168, 67, 0.1)', borderWidth: 2, tension: 0.4, fill: true, pointBackgroundColor: '#D4A843', pointBorderColor: '#fff', pointRadius: 4, pointHoverRadius: 6 }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#A0A0B0' } }, tooltip: { backgroundColor: '#18181C', titleColor: '#D4A843', bodyColor: '#fff' } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#A0A0B0' } }, x: { grid: { display: false }, ticks: { color: '#A0A0B0' } } } }
+    data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Bids Activity', data: [12, 19, 15, 27, 22, 34, 45], borderColor: '#D4A843', backgroundColor: 'rgba(212,168,67,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointBackgroundColor: '#D4A843', pointBorderColor: '#fff', pointRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#A0A0B0' } } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#A0A0B0' } }, x: { grid: { display: false }, ticks: { color: '#A0A0B0' } } } }
   });
 }
-
-function updateChart(bidData) { if (bidsChart) { bidsChart.data.datasets[0].data = bidData; bidsChart.update('active'); } }
 
 // ========== NOTIFICATIONS ==========
 async function requestNotificationPermission() {
   if ('Notification' in window) {
-    const permission = await Notification.requestPermission();
+    var permission = await Notification.requestPermission();
     notificationPermission = permission === 'granted';
-    if (notificationPermission) { toast('🔔 Notifications enabled!', 'success'); addActivity('Enabled desktop notifications', 'product'); }
-    else { toast('Notifications blocked.', 'warning'); }
-  } else { toast('Notifications not supported', 'error'); }
-}
-
-function sendNotification(title, body, tag = 'bid') {
-  if (!notificationPermission) return;
-  try { const notification = new Notification(title, { body: body, tag: tag, silent: false }); setTimeout(() => notification.close(), 5000); } catch(e) {}
+    if (notificationPermission) toast('🔔 Notifications enabled!', 'success');
+    else toast('Notifications blocked.', 'warning');
+  }
 }
 
 // ========== SOCKET ==========
@@ -405,10 +369,8 @@ function connectSocket() {
   if (state.socket) return;
   state.socket = io();
   state.socket.on('new-bid', function(data) {
-    addActivity(`${data.bidder?.name || 'Someone'} placed a bid on "${data.productName?.slice(0,30)}${data.productName?.length>30?'…':''}"`, 'bid', data.amount);
-    sendNotification('💰 New Bid Placed!', `${data.bidder?.name || 'Someone'} bid $${data.amount.toLocaleString()} on ${data.productName}`, 'new-bid');
+    addActivity((data.bidder?.name || 'Someone') + ' placed a bid on "' + (data.productName?.slice(0,30) || 'item') + '"', 'bid', data.amount);
     toast('💰 New bid: $' + data.amount.toLocaleString(), 'success');
-    if (bidsChart) { const newData = bidsChart.data.datasets[0].data.map(() => Math.floor(Math.random() * 50) + 10); updateChart(newData); }
     refreshCurrentPage();
   });
 }
@@ -437,9 +399,10 @@ function updateHeroStats() {
 
 function buildTicker() { 
   var html = ''; 
-  state.products.slice(0,10).forEach(function(p) { 
-    html += '<div class="ticker-item"><span>' + (p.emoji||'📦') + '</span><span>' + escapeHtml(p.name.substring(0,30)) + '</span><span class="up">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</span></div>'; 
-  }); 
+  for (var i = 0; i < Math.min(state.products.length, 10); i++) {
+    var p = state.products[i];
+    html += '<div class="ticker-item"><span>' + (p.emoji||'📦') + '</span><span>' + escapeHtml(p.name.substring(0,30)) + '</span><span class="up">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</span></div>';
+  }
   document.getElementById('tickerInner').innerHTML = html + html; 
 }
 
@@ -481,10 +444,20 @@ function renderFeatured() {
 }
 
 function renderMyListings() { 
-  if (!state.user) return; 
-  var mine = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); 
-  var grid = document.getElementById('myListingsGrid'); 
-  if (grid) grid.innerHTML = mine.length ? mine.map(function(p){ return makeCard(p, true); }).join('') : '<div class="empty-state"><div class="empty-title">No listings yet</div><button class="btn btn-gold" onclick="nav(\'create\')">Create Auction</button></div>'; 
+  if (!state.user) return;
+  fetch('/api/products/my-products', { headers: { 'Authorization': 'Bearer ' + state.token } })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    var mine = data.data || [];
+    var grid = document.getElementById('myListingsGrid'); 
+    if (grid) {
+      if (mine.length) {
+        grid.innerHTML = mine.map(function(p) { return makeCard(p, true); }).join('');
+      } else {
+        grid.innerHTML = '<div class="empty-state"><div class="empty-title">No listings yet</div><button class="btn btn-gold" onclick="nav(\'create\')">Create Auction</button></div>';
+      }
+    }
+  });
 }
 
 function renderMyBids() { 
@@ -518,13 +491,14 @@ async function openModal(id) {
     bidSec.classList.remove('hidden'); 
     document.getElementById('bidAmount').dataset.id = id; 
   } else { 
-    bidSec.classList.add('hidden'); 
+    bidSec.classList.add('hidden');
   } 
   var bidsHtml = '<div style="margin-top:1rem"><strong>Bid History (' + (p.bids ? p.bids.length : 0) + ')</strong></div>'; 
-  if (p.bids && p.bids.length) { 
-    p.bids.slice(0,10).forEach(function(b){ 
-      bidsHtml += '<div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--ink-3)"><span>' + escapeHtml(b.bidder.name) + '</span><span>$' + b.amount.toLocaleString() + '</span><span style="font-size:0.7rem">' + new Date(b.createdAt).toLocaleTimeString() + '</span></div>'; 
-    }); 
+  if (p.bids && p.bids.length) {
+    for (var i = 0; i < p.bids.length; i++) {
+      var b = p.bids[i];
+      bidsHtml += '<div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--ink-3)"><span>' + escapeHtml(b.bidder.name) + '</span><span>$' + b.amount.toLocaleString() + '</span><span style="font-size:0.7rem">' + new Date(b.createdAt).toLocaleTimeString() + '</span></div>';
+    }
   } else { 
     bidsHtml += '<p style="color:var(--muted)">No bids yet</p>'; 
   } 
@@ -540,7 +514,7 @@ async function submitBid() {
   var data = await apiCall('/products/' + id + '/bid', { method: 'POST', body: JSON.stringify({ amount: amount }) }); 
   if (data.success) { 
     toast('Bid placed! $' + amount.toLocaleString(), 'success'); 
-    addActivity(`You placed a bid of $${amount.toLocaleString()}`, 'bid', amount); 
+    addActivity('You placed a bid of $' + amount.toLocaleString(), 'bid', amount); 
     loadProducts(); 
     closeModal(); 
   } else { 
@@ -561,10 +535,11 @@ function toggleWatch(id, btn) {
   localStorage.setItem('watchlist_' + (state.user ? state.user._id : ''), JSON.stringify([...state.watchlist])); 
 }
 
-let activeFilter = 'all';
+var activeFilter = 'all';
 function setFilter(f, el) { 
   activeFilter = f; 
-  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); }); 
+  var chips = document.querySelectorAll('.filter-chip');
+  for (var i = 0; i < chips.length; i++) chips[i].classList.remove('active');
   if(el) el.classList.add('active'); 
   renderMarketplace(); 
 }
@@ -580,19 +555,20 @@ function refreshCurrentPage() {
 
 function startTimers() { 
   setInterval(function(){ 
-    document.querySelectorAll('[data-end]').forEach(function(el){ 
-      var end = el.dataset.end; 
-      if(end) el.innerHTML = formatTime(end); 
-    }); 
+    var timers = document.querySelectorAll('[data-end]');
+    for (var i = 0; i < timers.length; i++) {
+      var end = timers[i].dataset.end; 
+      if(end) timers[i].innerHTML = formatTime(end); 
+    }
   }, 1000); 
 }
 
 function nav(page) { 
   var pages = ['hero','marketplace','dashboard','myListings','myBids','create','login','signup']; 
-  pages.forEach(function(p){ 
-    var el = document.getElementById(p + 'Page'); 
+  for (var i = 0; i < pages.length; i++) {
+    var el = document.getElementById(pages[i] + 'Page'); 
     if(el) el.classList.remove('active'); 
-  }); 
+  }
   document.getElementById(page + 'Page').classList.add('active'); 
   window.scrollTo(0,0); 
   if(page === 'marketplace') renderMarketplace(); 
@@ -605,31 +581,30 @@ function closeModal() { document.getElementById('productModal').classList.remove
 function demoLogin() { doLogin('demo@example.com', '123456'); }
 
 // ========== EVENT LISTENERS ==========
-document.getElementById('loginForm') && document.getElementById('loginForm').addEventListener('submit', function(e){ e.preventDefault(); doLogin(document.getElementById('liEmail').value, document.getElementById('liPass').value); });
-document.getElementById('signupForm') && document.getElementById('signupForm').addEventListener('submit', function(e){ e.preventDefault(); var name = document.getElementById('suFirst').value + ' ' + document.getElementById('suLast').value; doSignup(name, document.getElementById('suEmail').value, document.getElementById('suPass').value); });
-document.getElementById('createForm') && document.getElementById('createForm').addEventListener('submit', async function(e){ 
-  e.preventDefault(); 
-  if(!state.user) { nav('login'); return; } 
-  var data = await apiCall('/products', { 
-    method: 'POST', 
-    body: JSON.stringify({ 
-      name: document.getElementById('cfTitle').value, 
-      description: document.getElementById('cfDesc').value, 
-      category: document.getElementById('cfCat').value, 
-      emoji: document.getElementById('cfEmoji').value, 
-      startingPrice: parseFloat(document.getElementById('cfPrice').value), 
-      endTime: new Date(document.getElementById('cfEnd').value).toISOString() 
-    }) 
-  }); 
-  if(data.success) { 
-    toast('Auction created!', 'success'); 
-    addActivity(`Created new auction: ${document.getElementById('cfTitle').value}`, 'product'); 
-    loadProducts(); 
-    nav('myListings'); 
-  } else { 
-    toast('Error creating auction', 'error'); 
-  } 
-});
+var loginForm = document.getElementById('loginForm');
+if (loginForm) {
+  loginForm.addEventListener('submit', function(e){ e.preventDefault(); doLogin(document.getElementById('liEmail').value, document.getElementById('liPass').value); });
+}
+var signupForm = document.getElementById('signupForm');
+if (signupForm) {
+  signupForm.addEventListener('submit', function(e){ e.preventDefault(); var name = document.getElementById('suFirst').value + ' ' + document.getElementById('suLast').value; doSignup(name, document.getElementById('suEmail').value, document.getElementById('suPass').value); });
+}
+var createForm = document.getElementById('createForm');
+if (createForm) {
+  createForm.addEventListener('submit', async function(e){ 
+    e.preventDefault(); 
+    if(!state.user) { nav('login'); return; } 
+    var data = await apiCall('/products', { method: 'POST', body: JSON.stringify({ name: document.getElementById('cfTitle').value, description: document.getElementById('cfDesc').value, category: document.getElementById('cfCat').value, emoji: document.getElementById('cfEmoji').value, startingPrice: parseFloat(document.getElementById('cfPrice').value), endTime: new Date(document.getElementById('cfEnd').value).toISOString() }) }); 
+    if(data.success) { 
+      toast('Auction created!', 'success'); 
+      addActivity('Created new auction: ' + document.getElementById('cfTitle').value, 'product'); 
+      loadProducts(); 
+      nav('myListings'); 
+    } else { 
+      toast('Error creating auction', 'error'); 
+    } 
+  });
+}
 
 // ========== CURSOR ==========
 document.addEventListener('mousemove', function(e){ var c = document.getElementById('cursor'); if(c) c.style.transform = 'translate(' + e.clientX + 'px, ' + e.clientY + 'px)'; });
@@ -641,7 +616,7 @@ initChart();
 checkAuth();
 startTimers();
 
-setTimeout(() => {
+setTimeout(function() {
   addActivity('Welcome to BidVault! Start bidding now.', 'product');
   addActivity('🔥 Hot auction: Vintage Rolex Submariner', 'product');
 }, 2000);
