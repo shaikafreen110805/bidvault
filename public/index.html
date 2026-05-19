@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BidVault — Premium Live Auctions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--ink:#0C0C0E;--ink-2:#18181C;--ink-3:#26262E;--muted:#52525E;--subtle:#A0A0B0;--white:#F6F6FF;--gold:#D4A843;--gold-lt:#F5C842;--gold-dk:#9A7420;--red:#E84040;--green:#2DBE6C;--blue:#3B7EF8;--font-display:'Bebas Neue',sans-serif;--font-body:'DM Sans',sans-serif;--font-mono:'DM Mono',monospace;--radius:6px;--radius-lg:16px;--shadow:0 4px 24px rgba(0,0,0,.45);--shadow-lg:0 16px 64px rgba(0,0,0,.65);--ease-expo:cubic-bezier(0.16,1,0.3,1)}
+body{font-family:var(--font-body);background:var(--ink);color:var(--white);min-height:100vh;overflow-x:hidden;cursor:none}
+#cursor{position:fixed;top:0;left:0;z-index:9999;pointer-events:none;mix-blend-mode:differe nce}
+#cursor-ring{width:36px;height:36px;border:1.5px solid var(--white);border-radius:50%;position:absolute;top:-18px;left:-18px;transition:all .25s var(--ease-expo)}
+#cursor-dot{width:5px;height:5px;background:var(--gold);border-radius:50%;position:absolute;top:-2.5px;left:-2.5px}
+body.cursor-hover #cursor-ring{width:60px;height:60px;top:-30px;left:-30px;border-color:var(--gold)}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");background-repeat:repeat;background-size:200px}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--ink-2)}
+::-webkit-scrollbar-thumb{background:var(--gold-dk);border-radius:2px}
+#loader{position:fixed;inset:0;z-index:9998;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .6s}
+#loader.out{opacity:0;visibility:hidden}
+.loader-word{font-family:var(--font-display);font-size:clamp(4rem,12vw,9rem);overflow:hidden;line-height:1}
+.loader-word span{display:inline-block;animation:wordDrop .9s var(--ease-expo) forwards;opacity:0;transform:translateY(100%)}
+.loader-bar{width:200px;height:2px;background:var(--ink-3);position:relative;overflow:hidden}
+.loader-bar::after{content:'';position:absolute;inset-block:0;left:-100%;width:100%;background:var(--gold);animation:barSlide 1.4s var(--ease-expo) .2s forwards}
+@keyframes wordDrop{to{opacity:1;transform:translateY(0)}}
+@keyframes barSlide{to{left:100%}}
+#nav{position:fixed;top:0;left:0;right:0;z-index:900;display:flex;align-items:center;justify-content:space-between;padding:0 3rem;height:64px;background:rgba(12,12,14,.85);backdrop-filter:blur(24px);border-bottom:1px solid rgba(212,168,67,.15);transform:translateY(-100%);animation:navDrop .6s var(--ease-expo) 1.8s forwards}
+@keyframes navDrop{to{transform:translateY(0)}}
+.nav-logo{font-family:var(--font-display);font-size:1.6rem;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:8px;cursor:pointer}
+.nav-logo .dot{color:var(--gold)}
+.nav-center{display:flex;gap:2rem;align-items:center}
+.nav-link{font-size:.8rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle);position:relative;padding:4px 0;transition:color .2s;cursor:pointer;background:none;border:none}
+.nav-link::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--gold);transition:width .25s var(--ease-expo)}
+.nav-link:hover,.nav-link.active{color:var(--white)}
+.nav-link:hover::after,.nav-link.active::after{width:100%}
+.nav-right{display:flex;align-items:center;gap:12px}
+.btn{font-family:var(--font-body);font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:10px 20px;border-radius:var(--radius);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
+.btn-ghost{background:transparent;color:var(--subtle);border:1px solid var(--ink-3)}
+.btn-ghost:hover{border-color:var(--gold-dk);color:var(--white)}
+.btn-gold{background:var(--gold);color:var(--ink)}
+.btn-gold:hover{background:var(--gold-lt);transform:translateY(-1px);box-shadow:0 6px 20px rgba(212,168,67,.35)}
+.btn-sm{padding:7px 14px;font-size:.72rem}
+.btn-lg{padding:14px 32px;font-size:.88rem}
+#app{padding-top:64px}
+.page{display:none}
+.page.active{display:block;animation:pageFade .4s var(--ease-expo)}
+@keyframes pageFade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.container{max-width:1280px;margin:0 auto;padding:0 3rem}
+.hero-main{display:grid;grid-template-columns:1fr 1fr;min-height:calc(100vh - 64px)}
+.hero-left{padding:5rem 4rem 4rem 3rem;display:flex;flex-direction:column;justify-content:center}
+.hero-eyebrow{display:flex;align-items:center;gap:10px;font-size:.7rem;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:2rem}
+.hero-eyebrow::before{content:'';width:32px;height:1px;background:var(--gold)}
+.hero-h1{font-family:var(--font-display);font-size:clamp(4rem,7vw,7.5rem);line-height:.92;margin-bottom:2.5rem}
+.hero-h1 em{font-style:normal;color:transparent;-webkit-text-stroke:1px var(--gold-dk)}
+.hero-sub{font-size:1.05rem;color:var(--subtle);line-height:1.65;max-width:420px;margin-bottom:3rem}
+.hero-cta{display:flex;gap:12px}
+.hero-stats{margin-top:5rem;padding-top:2.5rem;border-top:1px solid var(--ink-3);display:flex;gap:3rem}
+.hero-stat-num{font-family:var(--font-display);font-size:2.8rem;color:var(--white);line-height:1}
+.hero-stat-num .unit{font-size:1.5rem;color:var(--gold)}
+.hero-stat-label{font-size:.72rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.hero-right{background:var(--ink-2);border-left:1px solid var(--ink-3);display:flex;align-items:center;justify-content:center;padding:3rem;position:relative}
+.showcase-card{width:100%;max-width:400px;background:var(--ink-3);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);animation:cardFloat 4s ease-in-out infinite}
+@keyframes cardFloat{50%{transform:translateY(-10px)}}
+.showcase-img{height:280px;background:linear-gradient(135deg,#1a1020,#0e1a2e,#1a1510);display:flex;align-items:center;justify-content:center;font-size:5rem;position:relative}
+.showcase-live-badge{position:absolute;top:16px;left:16px;background:rgba(232,64,64,.9);padding:5px 10px;border-radius:100px;font-size:.65rem;font-weight:700;display:flex;align-items:center;gap:6px}
+.live-dot{width:6px;height:6px;background:#fff;border-radius:50%;animation:livePulse 1.2s infinite}
+@keyframes livePulse{50%{opacity:.4;transform:scale(.6)}}
+.showcase-body{padding:1.5rem}
+.showcase-price{font-family:var(--font-display);font-size:2rem;color:var(--gold)}
+.showcase-timer{font-family:var(--font-mono);color:var(--red)}
+.ticker-bar{background:var(--ink-3);border-top:1px solid var(--ink-3);border-bottom:1px solid rgba(212,168,67,.2);padding:10px 0;overflow:hidden}
+.ticker-inner{display:flex;animation:ticker 20s linear infinite;white-space:nowrap}
+.ticker-item{display:inline-flex;align-items:center;gap:8px;font-size:.72rem;color:var(--muted);padding:0 2.5rem;border-right:1px solid var(--ink-3)}
+@keyframes ticker{to{transform:translateX(-50%)}}
+.section-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:2.5rem;border-bottom:1px solid var(--ink-3);padding-bottom:1.5rem}
+.section-title{font-family:var(--font-display);font-size:2.8rem}
+.section-title span{color:var(--gold)}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:1.2rem}
+.auction-card{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:transform .3s var(--ease-expo),border-color .2s}
+.auction-card:hover{border-color:var(--gold-dk);transform:translateY(-6px);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.card-img{height:200px;background:linear-gradient(135deg,var(--ink-3),#1c1c24);display:flex;align-items:center;justify-content:center;font-size:3rem;position:relative}
+.card-status{position:absolute;top:12px;left:12px;padding:4px 10px;border-radius:100px;font-size:.62rem;font-weight:700}
+.status-live{background:rgba(232,64,64,.9)}
+.status-ending{background:rgba(212,168,67,.9);color:var(--ink)}
+.status-ended{background:rgba(80,80,95,.9)}
+.card-body{padding:1.25rem}
+.card-category{font-size:.65rem;font-weight:600;color:var(--gold);margin-bottom:6px}
+.card-name{font-weight:600;margin-bottom:.8rem}
+.card-price{font-family:var(--font-display);font-size:1.7rem}
+.card-timer{font-family:var(--font-mono);font-size:.78rem}
+.card-timer.urgent{color:var(--red);animation:timerFlicker 1s infinite}
+@keyframes timerFlicker{50%{opacity:.5}}
+.watch-btn{position:absolute;top:12px;right:12px;z-index:2;width:30px;height:30px;border-radius:50%;background:rgba(12,12,14,.7);border:1px solid var(--ink-3);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.watch-btn.active{color:var(--gold);border-color:var(--gold)}
+.form-wrap{max-width:520px;margin:3rem auto}
+.form-card{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:var(--radius-lg);padding:2.5rem}
+.form-title{font-family:var(--font-display);font-size:2.5rem}
+.form-group{margin-bottom:1.2rem}
+.form-label{font-size:.72rem;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+.form-input,.form-textarea,.form-select{width:100%;padding:11px 14px;background:var(--ink-3);border:1px solid var(--ink-3);border-radius:var(--radius);color:var(--white);font-family:var(--font-body)}
+.form-input:focus,.form-textarea:focus{border-color:var(--gold-dk);outline:none}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(16px);display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .3s}
+.modal-overlay.open{opacity:1;visibility:visible}
+.modal-box{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:var(--radius-lg);max-width:820px;width:90%;max-height:85vh;overflow:hidden}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr}
+.modal-img-side{height:100%;min-height:360px;background:linear-gradient(135deg,var(--ink-3),#16161e);display:flex;align-items:center;justify-content:center;font-size:6rem}
+.modal-info-side{padding:2rem;overflow-y:auto}
+.modal-price{font-family:var(--font-display);font-size:3rem;color:var(--gold)}
+.bid-input-row{display:flex;gap:10px;margin:1rem 0}
+.bid-input{flex:1;padding:12px;background:var(--ink-3);border:1px solid var(--gold-dk);border-radius:var(--radius);color:var(--white);font-family:var(--font-mono)}
+#toast-stack{position:fixed;bottom:1.5rem;right:1.5rem;z-index:2000;display:flex;flex-direction:column;gap:10px}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--ink-2);border:1px solid var(--ink-3);border-radius:var(--radius);animation:toastIn .35s forwards}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+.empty-state{text-align:center;padding:5rem 2rem;color:var(--muted);grid-column:1/-1}
+.hidden{display:none}
+/* NEW: Activity Feed Styles */
+.activity-item{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--ink-3);animation:slideIn .3s ease}
+.activity-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.activity-bid{background:rgba(45,190,108,.15);color:var(--green)}
+.activity-product{background:rgba(212,168,67,.15);color:var(--gold)}
+.activity-text{flex:1;font-size:.85rem}
+.activity-time{font-size:.65rem;color:var(--muted);margin-top:4px}
+@keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+/* Chart Container */
+.chart-container{background:var(--ink-2);border-radius:var(--radius-lg);padding:1.5rem;margin-bottom:2rem}
+.live-badge-pulse{display:inline-flex;align-items:center;gap:6px;background:var(--red);padding:4px 10px;border-radius:100px;font-size:.65rem;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* Notification Permission */
+.notify-btn{background:rgba(212,168,67,.15);border:1px solid var(--gold-dk);border-radius:100px;padding:6px 12px;font-size:.7rem;cursor:pointer}
+@media(max-width:1024px){.hero-main{grid-template-columns:1fr}.hero-right{display:none}.grid-3,.grid-4{grid-template-columns:repeat(2,1fr)}.modal-grid{grid-template-columns:1fr}}
+@media(max-width:768px){#nav{padding:0 1.5rem}.container{padding:0 1.5rem}.hero-left{padding:4rem 1.5rem}.grid-3,.grid-4{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="cursor"><div id="cursor-ring"></div><div id="cursor-dot"></div></div>
+<div id="loader"><div class="loader-word"><span>B</span><span>I</span><span>D</span><span>V</span><span>A</span><span>U</span><span>L</span><span>T</span></div><div class="loader-bar"></div></div>
+<div id="toast-stack"></div>
+
+<nav id="nav"><a class="nav-logo" onclick="nav('hero')">BID<span class="dot">V</span>AULT</a>
+<div class="nav-center" id="navCenter" style="display:none">
+<button class="nav-link" onclick="nav('dashboard')">Dashboard</button>
+<button class="nav-link" onclick="nav('marketplace')">Marketplace</button>
+<button class="nav-link" onclick="nav('myListings')">My Listings</button>
+<button class="nav-link" onclick="nav('myBids')">My Bids</button>
+<button class="nav-link" onclick="nav('create')">+ New Auction</button>
+</div>
+<div id="navRight"><button class="btn btn-ghost btn-sm" onclick="nav('login')">Log in</button><button class="btn btn-gold btn-sm" onclick="nav('signup')">Get Started</button></div>
+<div id="navUser" class="hidden"><div class="user-avatar" id="navAvatar">?</div><span id="navName"></span><button class="btn btn-ghost btn-sm" onclick="logout()">Sign out</button></div>
+</nav>
+
+<div id="app">
+
+<div id="heroPage" class="page active">
+<div class="hero-main"><div class="hero-left"><div class="hero-eyebrow">Live Auction Platform</div>
+<h1 class="hero-h1">THE WORLD'S<br><em>FINEST</em><br>AUCTION HOUSE</h1>
+<p class="hero-sub">Real-time bidding on rare collectibles, luxury goods, and one-of-a-kind items.</p>
+<div class="hero-cta"><button class="btn btn-gold btn-lg" onclick="nav('signup')">Create Account</button><button class="btn btn-ghost btn-lg" onclick="nav('marketplace')">Browse Auctions</button></div>
+<div class="hero-stats"><div><div class="hero-stat-num"><span id="hs1">0</span><span class="unit">+</span></div><div class="hero-stat-label">Live Auctions</div></div>
+<div><div class="hero-stat-num"><span id="hs2">0</span><span class="unit">+</span></div><div class="hero-stat-label">Total Bids</div></div>
+<div><div class="hero-stat-num">$<span id="hs3">0</span><span class="unit">K+</span></div><div class="hero-stat-label">Volume Traded</div></div></div></div>
+<div class="hero-right"><div class="showcase-card"><div class="showcase-img"><div class="showcase-live-badge"><div class="live-dot"></div>Live Now</div>🏺</div>
+<div class="showcase-body"><div class="showcase-title" id="showcaseTitle">Loading...</div><div class="showcase-meta" id="showcaseMeta">—</div>
+<div class="showcase-price-row"><div><div class="showcase-price-label">Current Bid</div><div class="showcase-price" id="showcasePrice">$—</div></div>
+<div style="text-align:right"><div class="showcase-timer-label">Ending In</div><div class="showcase-timer" id="showcaseTimer">—</div></div></div>
+<button class="showcase-bid-btn" onclick="nav('signup')">Register to Bid →</button></div></div></div></div>
+<div class="ticker-bar"><div class="ticker-inner" id="tickerInner"></div></div>
+<div class="container"><div class="section-header"><div><div class="section-title">Featured <span>Lots</span></div><div class="section-sub">Trending auctions</div></div><button class="btn btn-ghost" onclick="nav('marketplace')">View All →</button></div>
+<div class="grid-3" id="featuredGrid"></div></div></div>
+
+<div id="marketplacePage" class="page"><div style="padding:3rem"><div class="section-header"><div><div class="section-title">Marketplace</div><div class="section-sub" id="marketplaceCount">Loading auctions...</div></div></div>
+<div class="filter-bar" style="display:flex;gap:12px;margin-bottom:2rem;flex-wrap:wrap">
+<div class="search-wrap" style="flex:1;position:relative"><input type="text" id="searchInput" class="form-input" style="padding-left:40px" placeholder="Search lots..."></div>
+<button class="filter-chip btn-ghost btn-sm active" data-filter="all" onclick="setFilter('all',this)">All</button>
+<button class="filter-chip btn-ghost btn-sm" data-filter="live" onclick="setFilter('live',this)">Live</button>
+<button class="filter-chip btn-ghost btn-sm" data-filter="ending" onclick="setFilter('ending',this)">Ending Soon</button>
+<select id="sortSelect" class="form-select" style="width:auto" onchange="renderMarketplace()"><option value="newest">Newest</option><option value="price_asc">Price ↑</option><option value="price_desc">Price ↓</option><option value="bids">Most Bids</option></select></div>
+<div class="grid-4" id="marketplaceGrid"></div></div></div>
+
+<div id="dashboardPage" class="page"><div style="padding:3rem"><div class="section-header"><div><div class="section-title">Dashboard</div><div class="section-sub" id="dashGreeting">Welcome back</div><button id="enableNotifications" class="notify-btn" onclick="requestNotificationPermission()">🔔 Enable Notifications</button></div><button class="btn btn-gold btn-sm" onclick="nav('create')">+ New Auction</button></div>
+<!-- NEW: Analytics Chart -->
+<div class="chart-container"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-weight:600">📊 Bid Activity Analytics</span><span class="live-badge-pulse"><span class="live-dot"></span> LIVE</span></div><canvas id="bidsChart" height="200"></canvas></div>
+<div class="grid-4" id="kpiGrid" style="margin-bottom:2rem"></div>
+<div class="grid-2" style="margin-bottom:2rem"><div class="panel" style="background:var(--ink-2);padding:1.5rem;border-radius:var(--radius-lg)"><div style="font-weight:600;margin-bottom:1rem;display:flex;justify-content:space-between"><span>🔥 Live Activity Feed</span><span style="font-size:.65rem;color:var(--muted)">Real-time updates</span></div><div id="activityFeed" style="max-height:300px;overflow-y:auto"></div></div>
+<div class="panel" style="background:var(--ink-2);padding:1.5rem;border-radius:var(--radius-lg)"><div style="font-weight:600;margin-bottom:1rem">📦 My Listings</div><div id="dashListings"></div></div></div></div></div>
+
+<div id="myListingsPage" class="page"><div style="padding:3rem"><div class="section-header"><div><div class="section-title">My <span>Listings</span></div><div class="section-sub">Auctions you've created</div></div><button class="btn btn-gold btn-sm" onclick="nav('create')">+ New Auction</button></div><div class="grid-3" id="myListingsGrid"></div></div></div>
+
+<div id="myBidsPage" class="page"><div style="padding:3rem"><div class="section-header"><div><div class="section-title">My <span>Bids</span></div><div class="section-sub">Your bidding history</div></div></div><div class="grid-3" id="myBidsGrid"></div></div></div>
+
+<div id="createPage" class="page"><div class="form-wrap"><div class="form-card"><div class="form-title">Create Auction</div><div class="form-sub" style="margin-bottom:2rem">List your item for global bidders</div>
+<form id="createForm"><div class="form-group"><input type="text" id="cfTitle" class="form-input" placeholder="Auction Title *" required></div>
+<div class="form-group"><textarea id="cfDesc" class="form-textarea" rows="3" placeholder="Description *" required></textarea></div>
+<div class="form-row"><div class="form-group"><select id="cfCat" class="form-select"><option value="Art">🎨 Art</option><option value="Watches">⌚ Watches</option><option value="Jewelry">💎 Jewelry</option><option value="Collectibles">🏺 Collectibles</option><option value="Automobiles">🚗 Automobiles</option></select></div>
+<div class="form-group"><input type="text" id="cfEmoji" class="form-input" placeholder="Emoji" maxlength="2" value="🎨"></div></div>
+<div class="form-row"><div class="form-group"><input type="number" id="cfPrice" class="form-input" placeholder="Starting Price $" required></div>
+<div class="form-group"><input type="datetime-local" id="cfEnd" class="form-input" required></div></div>
+<button type="submit" class="btn btn-gold w-full btn-lg">Launch Auction →</button></form></div></div></div>
+
+<div id="loginPage" class="page"><div class="form-wrap"><div class="form-card"><div class="form-title">Welcome Back</div><div class="form-sub" style="margin-bottom:2rem">Sign in to your account</div>
+<form id="loginForm"><div class="form-group"><input type="email" id="liEmail" class="form-input" placeholder="Email" required></div>
+<div class="form-group"><input type="password" id="liPass" class="form-input" placeholder="Password" required></div>
+<button type="submit" class="btn btn-gold w-full btn-lg">Sign In →</button></form>
+<div class="form-switch-link" style="text-align:center;margin-top:1.5rem">No account? <a onclick="nav('signup')" style="color:var(--gold);cursor:pointer">Create one free</a></div>
+<div class="divider" style="margin:1.5rem 0;height:1px;background:var(--ink-3)"></div>
+<button class="btn btn-ghost w-full" onclick="demoLogin()">⚡ Try Demo Account</button></div></div></div>
+
+<div id="signupPage" class="page"><div class="form-wrap"><div class="form-card"><div class="form-title">Join BidVault</div><div class="form-sub" style="margin-bottom:2rem">Free to join</div>
+<form id="signupForm"><div class="form-row"><div class="form-group"><input type="text" id="suFirst" class="form-input" placeholder="First Name" required></div>
+<div class="form-group"><input type="text" id="suLast" class="form-input" placeholder="Last Name" required></div></div>
+<div class="form-group"><input type="email" id="suEmail" class="form-input" placeholder="Email" required></div>
+<div class="form-group"><input type="password" id="suPass" class="form-input" placeholder="Password (min 6)" required></div>
+<button type="submit" class="btn btn-gold w-full btn-lg">Create Account →</button></form>
+<div class="form-switch-link" style="text-align:center;margin-top:1.5rem">Already a member? <a onclick="nav('login')" style="color:var(--gold);cursor:pointer">Sign in</a></div></div></div></div>
+
+</div>
+
+<div class="modal-overlay" id="productModal"><div class="modal-box"><div class="modal-grid"><div class="modal-img-side" id="modalImg">📦</div><div class="modal-info-side"><div class="modal-price" id="modalPrice">—</div><div id="modalStatus"></div><p id="modalDesc" style="margin:1rem 0;color:var(--subtle)"></p><div class="bid-input-row hidden" id="bidSection"><input type="number" class="bid-input" id="bidAmount" placeholder="Enter bid"><button class="btn btn-gold" onclick="submitBid()">Place Bid</button></div><div id="modalBidHistory"></div><button class="btn btn-ghost btn-sm" onclick="closeModal()" style="margin-top:1rem">Close</button></div></div></div></div>
+
+<script>
+// ========== FEATURE 1: REAL-TIME ACTIVITY FEED ==========
+let activityFeed = [];
+
+function addActivity(message, type, amount = null) {
+  const activity = {
+    id: Date.now(),
+    message: message,
+    type: type,
+    amount: amount,
+    time: new Date()
+  };
+  activityFeed.unshift(activity);
+  if (activityFeed.length > 20) activityFeed.pop();
+  renderActivityFeed();
+}
+
+function renderActivityFeed() {
+  const container = document.getElementById('activityFeed');
+  if (!container) return;
+  if (activityFeed.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:1rem">No activity yet</p>';
+    return;
+  }
+  container.innerHTML = activityFeed.map(a => `
+    <div class="activity-item">
+      <div class="activity-icon activity-${a.type === 'bid' ? 'bid' : 'product'}">
+        ${a.type === 'bid' ? '💰' : '📦'}
+      </div>
+      <div class="activity-text">
+        <div>${escapeHtml(a.message)}</div>
+        <div class="activity-time">${timeAgo(a.time)}</div>
+      </div>
+      ${a.amount ? `<div style="color:var(--gold);font-weight:600">$${a.amount.toLocaleString()}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function timeAgo(date) {
+  const diff = Date.now() - new Date(date);
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return Math.floor(diff / 86400000) + 'd ago';
+}
+
+// ========== FEATURE 2: ADVANCED ANALYTICS CHART ==========
+let bidsChart = null;
+
+function initChart() {
+  const ctx = document.getElementById('bidsChart')?.getContext('2d');
+  if (!ctx) return;
+  bidsChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{
+        label: 'Bids Activity',
+        data: [12, 19, 15, 27, 22, 34, 45],
+        borderColor: '#D4A843',
+        backgroundColor: 'rgba(212, 168, 67, 0.1)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: '#D4A843',
+        pointBorderColor: '#fff',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { labels: { color: '#A0A0B0' } },
+        tooltip: { backgroundColor: '#18181C', titleColor: '#D4A843', bodyColor: '#fff' }
+      },
+      scales: {
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#A0A0B0' } },
+        x: { grid: { display: false }, ticks: { color: '#A0A0B0' } }
+      }
+    }
+  });
+}
+
+function updateChart(bidData) {
+  if (!bidsChart) return;
+  bidsChart.data.datasets[0].data = bidData;
+  bidsChart.update('active');
+}
+
+// ========== FEATURE 3: DESKTOP PUSH NOTIFICATIONS ==========
+let notificationPermission = false;
+
+async function requestNotificationPermission() {
+  if ('Notification' in window) {
+    const permission = await Notification.requestPermission();
+    notificationPermission = permission === 'granted';
+    if (notificationPermission) {
+      toast('🔔 Notifications enabled! You\'ll be alerted when outbid.', 'success');
+      addActivity('Enabled desktop notifications', 'product');
+    } else {
+      toast('Notifications blocked. Enable in browser settings.', 'warning');
+    }
+  } else {
+    toast('Notifications not supported in this browser', 'error');
+  }
+}
+
+function sendNotification(title, body, tag = 'bid') {
+  if (!notificationPermission) return;
+  try {
+    const notification = new Notification(title, {
+      body: body,
+      icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23D4A843"%3E%3Cpath d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/%3E%3C/svg%3E',
+      tag: tag,
+      silent: false
+    });
+    setTimeout(() => notification.close(), 5000);
+  } catch(e) { console.log('Notification error:', e); }
+}
+
+// ========== ENHANCED SOCKET WITH NOTIFICATIONS ==========
+function connectSocket() {
+  if (state.socket) return;
+  state.socket = io();
+  state.socket.on('new-bid', function(data) {
+    // Add to activity feed
+    addActivity(`${data.bidder?.name || 'Someone'} placed a bid on "${data.productName?.slice(0,30)}${data.productName?.length>30?'…':''}"`, 'bid', data.amount);
+    
+    // Send desktop notification
+    sendNotification('💰 New Bid Placed!', `${data.bidder?.name || 'Someone'} bid $${data.amount.toLocaleString()} on ${data.productName}`, 'new-bid');
+    
+    // Show toast
+    toast('💰 New bid: $' + data.amount.toLocaleString() + ' on ' + (data.productName?.slice(0,20) || 'item'), 'success');
+    
+    // Update chart with random mock data (in production, use real data)
+    if (bidsChart) {
+      const newData = bidsChart.data.datasets[0].data.map(() => Math.floor(Math.random() * 50) + 10);
+      updateChart(newData);
+    }
+    
+    refreshCurrentPage();
+  });
+  
+  // Watchlist outbid notification
+  state.socket.on('you-were-outbid', function(data) {
+    sendNotification('⚠️ You Were Outbid!', `Someone just outbid you on "${data.productName}". Bid now to win!`, 'outbid');
+    addActivity(`⚠️ You were outbid on "${data.productName?.slice(0,30)}${data.productName?.length>30?'…':''}"`, 'bid');
+    toast(`⚠️ Outbid! Someone bid $${data.newAmount} on ${data.productName}`, 'warning');
+  });
+}
+
+// ========== MAIN STATE AND API ==========
+let state = { user: null, token: null, products: [], watchlist: new Set(), socket: null };
+
+function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
+function toast(msg, type) { var icons = { success:'✓', error:'✕', warning:'⚠' }; var el = document.createElement('div'); el.className = 'toast'; el.innerHTML = '<span>' + (icons[type]||'ℹ') + '</span> ' + msg; document.getElementById('toast-stack').appendChild(el); setTimeout(function() { el.remove(); }, 3000); }
+
+async function apiCall(endpoint, opts) { var headers = { 'Content-Type': 'application/json' }; if (state.token) headers['Authorization'] = 'Bearer ' + state.token; var res = await fetch('/api' + endpoint, Object.assign({}, opts, { headers: headers })); return res.json(); }
+
+function checkAuth() { var t = localStorage.getItem('bv_token'); var u = localStorage.getItem('bv_user'); if (t && u) { state.token = t; state.user = JSON.parse(u); showUserUI(); loadProducts(); nav('dashboard'); } else { nav('hero'); } }
+
+function showUserUI() { document.getElementById('navRight').classList.add('hidden'); document.getElementById('navUser').classList.remove('hidden'); document.getElementById('navCenter').style.display = 'flex'; var initials = (state.user.name || 'U').split(' ').map(function(n){ return n[0]; }).join('').slice(0,2).toUpperCase(); document.getElementById('navAvatar').innerHTML = initials; document.getElementById('navName').innerHTML = state.user.name; }
+
+function logout() { localStorage.removeItem('bv_token'); localStorage.removeItem('bv_user'); state.token = null; state.user = null; if(state.socket) state.socket.disconnect(); state.socket = null; document.getElementById('navRight').classList.remove('hidden'); document.getElementById('navUser').classList.add('hidden'); document.getElementById('navCenter').style.display = 'none'; nav('hero'); toast('Signed out', 'info'); }
+
+async function doLogin(email, pw) { var data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email: email, password: pw }) }); if (data.success) { state.token = data.token; state.user = data.user; localStorage.setItem('bv_token', data.token); localStorage.setItem('bv_user', JSON.stringify(data.user)); showUserUI(); loadProducts(); nav('dashboard'); toast('Welcome back!', 'success'); connectSocket(); addActivity(`${state.user.name} logged in`, 'product'); } else { toast(data.message || 'Login failed', 'error'); } }
+
+async function doSignup(name, email, pw) { var data = await apiCall('/auth/signup', { method: 'POST', body: JSON.stringify({ name: name, email: email, password: pw }) }); if (data.success) { state.token = data.token; state.user = data.user; localStorage.setItem('bv_token', data.token); localStorage.setItem('bv_user', JSON.stringify(data.user)); showUserUI(); loadProducts(); nav('dashboard'); toast('Account created!', 'success'); connectSocket(); addActivity(`${name} joined BidVault`, 'product'); } else { toast(data.message || 'Signup failed', 'error'); } }
+
+async function loadProducts() { if (!state.token) return; var data = await apiCall('/products'); if (data.success) { state.products = data.data; renderMarketplace(); renderFeatured(); updateHeroStats(); buildTicker(); } }
+
+function updateHeroStats() { var active = state.products.filter(function(p) { return p.isActive; }).length; var totalBids = state.products.reduce(function(s,p) { return s + (p.bidCount||0); }, 0); var volume = state.products.reduce(function(s,p) { return s + (p.currentPrice||p.startingPrice); }, 0) / 1000; document.getElementById('hs1').innerHTML = active; document.getElementById('hs2').innerHTML = totalBids; document.getElementById('hs3').innerHTML = Math.floor(volume); }
+
+function buildTicker() { var html = ''; state.products.slice(0,10).forEach(function(p) { html += '<div class="ticker-item"><span>' + (p.emoji||'📦') + '</span><span>' + escapeHtml(p.name.substring(0,30)) + '</span><span class="up">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</span></div>'; }); document.getElementById('tickerInner').innerHTML = html + html; }
+
+function makeCard(p, showDel) { var isLive = p.isActive && new Date(p.endTime) > new Date(); var ending = isLive && (new Date(p.endTime) - Date.now()) < 3600000; var watched = state.watchlist.has(p._id); var badge = !isLive ? 'status-ended' : ending ? 'status-ending' : 'status-live'; var badgeText = !isLive ? 'Ended' : ending ? 'Ending Soon' : 'Live'; var initials = p.seller && p.seller.name ? p.seller.name.split(' ').map(function(x){ return x[0]; }).join('').slice(0,2).toUpperCase() : '??'; return '<div class="auction-card" onclick="openModal(\'' + p._id + '\')"><div class="watch-btn ' + (watched ? 'active' : '') + '" onclick="event.stopPropagation();toggleWatch(\'' + p._id + '\',this)">★</div><div class="card-img"><div class="card-status ' + badge + '">' + badgeText + '</div>' + (p.emoji||'📦') + '</div><div class="card-body"><div class="card-category">' + (p.category||'General') + '</div><div class="card-name">' + escapeHtml(p.name) + '</div><div class="card-price-row"><div><div class="card-price-label">Current</div><div class="card-price">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</div></div><div>' + (p.bidCount||0) + ' bids</div></div><div class="card-footer" style="display:flex;justify-content:space-between;margin-top:0.5rem"><div>' + initials + '</div><div class="card-timer ' + (ending && isLive ? 'urgent' : '') + '" data-end="' + p.endTime + '">' + formatTime(p.endTime) + '</div></div></div></div>'; }
+
+function formatTime(end) { var diff = new Date(end) - Date.now(); if (diff <= 0) return 'Ended'; var h = Math.floor(diff/3600000); var m = Math.floor((diff%3600000)/60000); if (h > 23) return Math.floor(h/24) + 'd'; if (h > 0) return h + 'h ' + m + 'm'; return m + 'm'; }
+
+function renderMarketplace() { var prods = state.products.filter(function(p){ return p.isActive; }); var sort = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'newest'; if (sort === 'price_asc') prods.sort(function(a,b){ return (a.currentPrice||a.startingPrice) - (b.currentPrice||b.startingPrice); }); if (sort === 'price_desc') prods.sort(function(a,b){ return (b.currentPrice||b.startingPrice) - (a.currentPrice||a.startingPrice); }); if (sort === 'bids') prods.sort(function(a,b){ return (b.bidCount||0) - (a.bidCount||0); }); var grid = document.getElementById('marketplaceGrid'); if (grid) grid.innerHTML = prods.length ? prods.map(function(p){ return makeCard(p); }).join('') : '<div class="empty-state">No auctions found</div>'; startTimers(); }
+
+function renderFeatured() { var featured = state.products.slice(0,3); var grid = document.getElementById('featuredGrid'); if (grid) grid.innerHTML = featured.map(function(p){ return makeCard(p); }).join(''); }
+
+function renderMyListings() { if (!state.user) return; var mine = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); var grid = document.getElementById('myListingsGrid'); if (grid) grid.innerHTML = mine.length ? mine.map(function(p){ return makeCard(p, true); }).join('') : '<div class="empty-state"><div class="empty-title">No listings yet</div><button class="btn btn-gold" onclick="nav(\'create\')">Create Auction</button></div>'; }
+
+function renderMyBids() { if (!state.user) return; var bidOn = state.products.filter(function(p){ return p.bids && p.bids.some(function(b){ return b.bidder && b.bidder._id === state.user._id; }); }); var grid = document.getElementById('myBidsGrid'); if (grid) grid.innerHTML = bidOn.length ? bidOn.map(function(p){ return makeCard(p); }).join('') : '<div class="empty-state">No bids placed yet</div>'; }
+
+function renderDashboard() { if (!state.user) return; var myListings = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); var kpiHtml = '<div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Active Listings</div><div class="hero-stat-num">' + myListings.filter(function(p){ return p.isActive; }).length + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>My Bids</div><div class="hero-stat-num">' + state.products.filter(function(p){ return p.bids && p.bids.some(function(b){ return b.bidder && b.bidder._id === state.user._id; }); }).length + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Watchlist</div><div class="hero-stat-num">' + state.watchlist.size + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Volume</div><div class="hero-stat-num">$' + (myListings.reduce(function(s,p){ return s + (p.currentPrice||0); },0)/1000).toFixed(0) + 'k</div></div>';
+  document.getElementById('kpiGrid').innerHTML = kpiHtml;
+  var listingsDiv = document.getElementById('dashListings'); if (listingsDiv) listingsDiv.innerHTML = myListings.slice(0,3).map(function(p){ return '<div style="margin-bottom:0.5rem">' + escapeHtml(p.name) + ' - $' + (p.currentPrice||p.startingPrice).toLocaleString() + '</div>'; }).join('') || '<p style="color:var(--muted)">No listings yet</p>';
+}
+
+async function openModal(id) { var data = await apiCall('/products/' + id); if (!data.success) return; var p = data.data; var isLive = p.isActive && new Date(p.endTime) > Date.now(); document.getElementById('modalPrice').innerHTML = '$' + (p.currentPrice||p.startingPrice).toLocaleString(); document.getElementById('modalDesc').innerHTML = escapeHtml(p.description); document.getElementById('modalImg').innerHTML = p.emoji || '📦'; var statusHtml = '<span class="tag ' + (isLive ? 'tag-green' : 'tag-muted') + '">' + (isLive ? '🟢 LIVE' : '🔴 ENDED') + '</span>'; document.getElementById('modalStatus').innerHTML = statusHtml; var bidSec = document.getElementById('bidSection'); if (isLive && state.user && p.seller && p.seller._id !== state.user._id) { bidSec.classList.remove('hidden'); document.getElementById('bidAmount').dataset.id = id; } else { bidSec.classList.add('hidden'); } var bidsHtml = '<div style="margin-top:1rem"><strong>Bid History (' + (p.bids ? p.bids.length : 0) + ')</strong></div>'; if (p.bids && p.bids.length) { p.bids.slice(0,10).forEach(function(b){ bidsHtml += '<div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--ink-3)"><span>' + escapeHtml(b.bidder.name) + '</span><span>$' + b.amount.toLocaleString() + '</span><span style="font-size:0.7rem">' + new Date(b.createdAt).toLocaleTimeString() + '</span></div>'; }); } else { bidsHtml += '<p style="color:var(--muted)">No bids yet</p>'; } document.getElementById('modalBidHistory').innerHTML = bidsHtml; document.getElementById('productModal').classList.add('open'); }
+
+async function submitBid() { if (!state.user) { closeModal(); nav('login'); return; } var id = document.getElementById('bidAmount').dataset.id; var amount = parseFloat(document.getElementById('bidAmount').value); if (!amount) return; var data = await apiCall('/products/' + id + '/bid', { method: 'POST', body: JSON.stringify({ amount: amount }) }); if (data.success) { toast('Bid placed! $' + amount.toLocaleString(), 'success'); addActivity(`You placed a bid of $${amount.toLocaleString()}`, 'bid', amount); loadProducts(); closeModal(); } else { toast(data.message || 'Bid failed', 'error'); } }
+
+function toggleWatch(id, btn) { if (state.watchlist.has(id)) { state.watchlist.delete(id); btn.classList.remove('active'); toast('Removed from watchlist', 'info'); } else { state.watchlist.add(id); btn.classList.add('active'); toast('Added to watchlist', 'success'); } localStorage.setItem('watchlist_' + (state.user ? state.user._id : ''), JSON.stringify([...state.watchlist])); }
+
+function setFilter(f, el) { activeFilter = f; document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); }); if(el) el.classList.add('active'); renderMarketplace(); }
+
+function refreshCurrentPage() { if (document.getElementById('marketplacePage').classList.contains('active')) renderMarketplace(); if (document.getElementById('dashboardPage').classList.contains('active')) renderDashboard(); if (document.getElementById('myListingsPage').classList.contains('active')) renderMyListings(); if (document.getElementById('myBidsPage').classList.contains('active')) renderMyBids(); renderFeatured(); updateHeroStats(); }
+
+function startTimers() { setInterval(function(){ document.querySelectorAll('[data-end]').forEach(function(el){ var end = el.dataset.end; if(end) el.innerHTML = formatTime(end); }); }, 1000); }
+
+function nav(page) { var pages = ['hero','marketplace','dashboard','myListings','myBids','create','login','signup']; pages.forEach(function(p){ var el = document.getElementById(p + 'Page'); if(el) el.classList.remove('active'); }); document.getElementById(page + 'Page').classList.add('active'); window.scrollTo(0,0); if(page === 'marketplace') renderMarketplace(); if(page === 'dashboard') renderDashboard(); if(page === 'myListings') renderMyListings(); if(page === 'myBids') renderMyBids(); }
+
+function closeModal() { document.getElementById('productModal').classList.remove('open'); }
+function demoLogin() { doLogin('demo@example.com', '123456'); }
+
+document.getElementById('loginForm') && document.getElementById('loginForm').addEventListener('submit', function(e){ e.preventDefault(); doLogin(document.getElementById('liEmail').value, document.getElementById('liPass').value); });
+document.getElementById('signupForm') && document.getElementById('signupForm').addEventListener('submit', function(e){ e.preventDefault(); var name = document.getElementById('suFirst').value + ' ' + document.getElementById('suLast').value; doSignup(name, document.getElementById('suEmail').value, document.getElementById('suPass').value); });
+document.getElementById('createForm') && document.getElementById('createForm').addEventListener('submit', async function(e){ e.preventDefault(); if(!state.user) { nav('login'); return; } var data = await apiCall('/products', { method: 'POST', body: JSON.stringify({ name: document.getElementById('cfTitle').value, description: document.getElementById('cfDesc').value, category: document.getElementById('cfCat').value, emoji: document.getElementById('cfEmoji').value, startingPrice: parseFloat(document.getElementById('cfPrice').value), endTime: new Date(document.getElementById('cfEnd').value).toISOString() }) }); if(data.success) { toast('Auction created!', 'success'); addActivity(`Created new auction: ${document.getElementById('cfTitle').value}`, 'product'); loadProducts(); nav('myListings'); } else { toast('Error creating auction', 'error'); } });
+
+// Custom cursor
+document.addEventListener('mousemove', function(e){ var c = document.getElementById('cursor'); if(c) c.style.transform = 'translate(' + e.clientX + 'px, ' + e.clientY + 'px)'; });
+document.addEventListener('mouseover', function(e){ var hov = e.target.closest('a,button,.btn,.auction-card'); document.body.classList.toggle('cursor-hover', !!hov); });
+
+setTimeout(function(){ document.getElementById('loader').classList.add('out'); }, 1500);
+initChart();
+checkAuth();
+startTimers();
+
+// Add sample activity for demo
+setTimeout(() => {
+  addActivity('Welcome to BidVault! Start bidding now.', 'product');
+  addActivity('🔥 Hot auction: Vintage Rolex Submariner', 'product');
+}, 2000);
+</script>
+</body>
+</html>

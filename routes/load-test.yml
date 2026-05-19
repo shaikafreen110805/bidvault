@@ -1,0 +1,22 @@
+config:
+  target: "http://localhost:5000"
+  phases:
+    - duration: 60
+      arrivalRate: 50
+      name: "50 concurrent users"
+  ensure:
+    maxErrorRate: 0.05
+scenarios:
+  - flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "demo@example.com"
+            password: "123456"
+          capture:
+            json: "$.token"
+            as: "token"
+      - get:
+          url: "/api/products"
+          headers:
+            Authorization: "Bearer {{ token }}"
