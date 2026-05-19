@@ -224,17 +224,125 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;background-im
 <div class="modal-overlay" id="productModal"><div class="modal-box"><div class="modal-grid"><div class="modal-img-side" id="modalImg">📦</div><div class="modal-info-side"><div class="modal-price" id="modalPrice">—</div><div id="modalStatus"></div><p id="modalDesc" style="margin:1rem 0;color:var(--subtle)"></p><div class="bid-input-row hidden" id="bidSection"><input type="number" class="bid-input" id="bidAmount" placeholder="Enter bid"><button class="btn btn-gold" onclick="submitBid()">Place Bid</button></div><div id="modalBidHistory"></div><button class="btn btn-ghost btn-sm" onclick="closeModal()" style="margin-top:1rem">Close</button></div></div></div></div>
 
 <script>
-// ========== FEATURE 1: REAL-TIME ACTIVITY FEED ==========
-let activityFeed = [];
+// ========== FIXED: CORRECT localStorage keys ==========
 
+let activityFeed = [];
+let bidsChart = null;
+let notificationPermission = false;
+let state = { user: null, token: null, products: [], watchlist: new Set(), socket: null };
+
+// ========== HELPER FUNCTIONS ==========
+function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
+
+function toast(msg, type) { 
+  var icons = { success:'✓', error:'✕', warning:'⚠' }; 
+  var el = document.createElement('div'); 
+  el.className = 'toast'; 
+  el.innerHTML = '<span>' + (icons[type]||'ℹ') + '</span> ' + msg; 
+  document.getElementById('toast-stack').appendChild(el); 
+  setTimeout(function() { el.remove(); }, 3000); 
+}
+
+async function apiCall(endpoint, opts) { 
+  var headers = { 'Content-Type': 'application/json' }; 
+  if (state.token) headers['Authorization'] = 'Bearer ' + state.token; 
+  var res = await fetch('/api' + endpoint, Object.assign({}, opts, { headers: headers })); 
+  return res.json(); 
+}
+
+// ========== FIXED: CORRECT localStorage keys ==========
+function checkAuth() { 
+  var t = localStorage.getItem('token');   // ✅ FIXED: 'token' not 'bv_token'
+  var u = localStorage.getItem('user');    // ✅ FIXED: 'user' not 'bv_user'
+  
+  console.log('🔍 checkAuth - Token exists:', !!t);
+  
+  if (t && u) { 
+    state.token = t; 
+    state.user = JSON.parse(u); 
+    showUserUI(); 
+    loadProducts(); 
+    if (document.getElementById('heroPage').classList.contains('active')) {
+      nav('dashboard');
+    }
+  } else { 
+    showGuestUI();
+  } 
+}
+
+function showGuestUI() {
+  document.getElementById('navRight').classList.remove('hidden');
+  document.getElementById('navUser').classList.add('hidden');
+  document.getElementById('navCenter').style.display = 'none';
+}
+
+function showUserUI() { 
+  console.log('🎨 Showing user UI for:', state.user?.name);
+  document.getElementById('navRight').classList.add('hidden'); 
+  document.getElementById('navUser').classList.remove('hidden'); 
+  document.getElementById('navCenter').style.display = 'flex'; 
+  var initials = (state.user.name || 'U').split(' ').map(function(n){ return n[0]; }).join('').slice(0,2).toUpperCase(); 
+  document.getElementById('navAvatar').innerHTML = initials; 
+  document.getElementById('navName').innerHTML = state.user.name; 
+}
+
+function logout() { 
+  localStorage.removeItem('token');    // ✅ FIXED
+  localStorage.removeItem('user');     // ✅ FIXED
+  state.token = null; 
+  state.user = null; 
+  if(state.socket) state.socket.disconnect(); 
+  state.socket = null; 
+  showGuestUI();
+  nav('hero'); 
+  toast('Signed out', 'info'); 
+}
+
+async function doLogin(email, pw) { 
+  var data = await apiCall('/auth/login', { 
+    method: 'POST', 
+    body: JSON.stringify({ email: email, password: pw }) 
+  }); 
+  if (data.success) { 
+    state.token = data.token; 
+    state.user = data.user; 
+    localStorage.setItem('token', data.token);      // ✅ Saves as 'token'
+    localStorage.setItem('user', JSON.stringify(data.user)); // ✅ Saves as 'user'
+    showUserUI(); 
+    loadProducts(); 
+    nav('dashboard'); 
+    toast('Welcome back!', 'success'); 
+    connectSocket(); 
+    addActivity(`${state.user.name} logged in`, 'product'); 
+  } else { 
+    toast(data.message || 'Login failed', 'error'); 
+  } 
+}
+
+async function doSignup(name, email, pw) { 
+  var data = await apiCall('/auth/signup', { 
+    method: 'POST', 
+    body: JSON.stringify({ name: name, email: email, password: pw }) 
+  }); 
+  if (data.success) { 
+    state.token = data.token; 
+    state.user = data.user; 
+    localStorage.setItem('token', data.token); 
+    localStorage.setItem('user', JSON.stringify(data.user)); 
+    showUserUI(); 
+    loadProducts(); 
+    nav('dashboard'); 
+    toast('Account created!', 'success'); 
+    connectSocket(); 
+    addActivity(`${name} joined BidVault`, 'product'); 
+  } else { 
+    toast(data.message || 'Signup failed', 'error'); 
+  } 
+}
+
+// ========== ACTIVITY FEED ==========
 function addActivity(message, type, amount = null) {
-  const activity = {
-    id: Date.now(),
-    message: message,
-    type: type,
-    amount: amount,
-    time: new Date()
-  };
+  const activity = { id: Date.now(), message: message, type: type, amount: amount, time: new Date() };
   activityFeed.unshift(activity);
   if (activityFeed.length > 20) activityFeed.pop();
   renderActivityFeed();
@@ -249,13 +357,8 @@ function renderActivityFeed() {
   }
   container.innerHTML = activityFeed.map(a => `
     <div class="activity-item">
-      <div class="activity-icon activity-${a.type === 'bid' ? 'bid' : 'product'}">
-        ${a.type === 'bid' ? '💰' : '📦'}
-      </div>
-      <div class="activity-text">
-        <div>${escapeHtml(a.message)}</div>
-        <div class="activity-time">${timeAgo(a.time)}</div>
-      </div>
+      <div class="activity-icon activity-${a.type === 'bid' ? 'bid' : 'product'}">${a.type === 'bid' ? '💰' : '📦'}</div>
+      <div class="activity-text"><div>${escapeHtml(a.message)}</div><div class="activity-time">${timeAgo(a.time)}</div></div>
       ${a.amount ? `<div style="color:var(--gold);font-weight:600">$${a.amount.toLocaleString()}</div>` : ''}
     </div>
   `).join('');
@@ -269,185 +372,275 @@ function timeAgo(date) {
   return Math.floor(diff / 86400000) + 'd ago';
 }
 
-// ========== FEATURE 2: ADVANCED ANALYTICS CHART ==========
-let bidsChart = null;
-
+// ========== CHART ==========
 function initChart() {
   const ctx = document.getElementById('bidsChart')?.getContext('2d');
   if (!ctx) return;
   bidsChart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      datasets: [{
-        label: 'Bids Activity',
-        data: [12, 19, 15, 27, 22, 34, 45],
-        borderColor: '#D4A843',
-        backgroundColor: 'rgba(212, 168, 67, 0.1)',
-        borderWidth: 2,
-        tension: 0.4,
-        fill: true,
-        pointBackgroundColor: '#D4A843',
-        pointBorderColor: '#fff',
-        pointRadius: 4,
-        pointHoverRadius: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { labels: { color: '#A0A0B0' } },
-        tooltip: { backgroundColor: '#18181C', titleColor: '#D4A843', bodyColor: '#fff' }
-      },
-      scales: {
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#A0A0B0' } },
-        x: { grid: { display: false }, ticks: { color: '#A0A0B0' } }
-      }
-    }
+    data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Bids Activity', data: [12, 19, 15, 27, 22, 34, 45], borderColor: '#D4A843', backgroundColor: 'rgba(212, 168, 67, 0.1)', borderWidth: 2, tension: 0.4, fill: true, pointBackgroundColor: '#D4A843', pointBorderColor: '#fff', pointRadius: 4, pointHoverRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#A0A0B0' } }, tooltip: { backgroundColor: '#18181C', titleColor: '#D4A843', bodyColor: '#fff' } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#A0A0B0' } }, x: { grid: { display: false }, ticks: { color: '#A0A0B0' } } } }
   });
 }
 
-function updateChart(bidData) {
-  if (!bidsChart) return;
-  bidsChart.data.datasets[0].data = bidData;
-  bidsChart.update('active');
-}
+function updateChart(bidData) { if (bidsChart) { bidsChart.data.datasets[0].data = bidData; bidsChart.update('active'); } }
 
-// ========== FEATURE 3: DESKTOP PUSH NOTIFICATIONS ==========
-let notificationPermission = false;
-
+// ========== NOTIFICATIONS ==========
 async function requestNotificationPermission() {
   if ('Notification' in window) {
     const permission = await Notification.requestPermission();
     notificationPermission = permission === 'granted';
-    if (notificationPermission) {
-      toast('🔔 Notifications enabled! You\'ll be alerted when outbid.', 'success');
-      addActivity('Enabled desktop notifications', 'product');
-    } else {
-      toast('Notifications blocked. Enable in browser settings.', 'warning');
-    }
-  } else {
-    toast('Notifications not supported in this browser', 'error');
-  }
+    if (notificationPermission) { toast('🔔 Notifications enabled!', 'success'); addActivity('Enabled desktop notifications', 'product'); }
+    else { toast('Notifications blocked.', 'warning'); }
+  } else { toast('Notifications not supported', 'error'); }
 }
 
 function sendNotification(title, body, tag = 'bid') {
   if (!notificationPermission) return;
-  try {
-    const notification = new Notification(title, {
-      body: body,
-      icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23D4A843"%3E%3Cpath d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/%3E%3C/svg%3E',
-      tag: tag,
-      silent: false
-    });
-    setTimeout(() => notification.close(), 5000);
-  } catch(e) { console.log('Notification error:', e); }
+  try { const notification = new Notification(title, { body: body, tag: tag, silent: false }); setTimeout(() => notification.close(), 5000); } catch(e) {}
 }
 
-// ========== ENHANCED SOCKET WITH NOTIFICATIONS ==========
+// ========== SOCKET ==========
 function connectSocket() {
   if (state.socket) return;
   state.socket = io();
   state.socket.on('new-bid', function(data) {
-    // Add to activity feed
     addActivity(`${data.bidder?.name || 'Someone'} placed a bid on "${data.productName?.slice(0,30)}${data.productName?.length>30?'…':''}"`, 'bid', data.amount);
-    
-    // Send desktop notification
     sendNotification('💰 New Bid Placed!', `${data.bidder?.name || 'Someone'} bid $${data.amount.toLocaleString()} on ${data.productName}`, 'new-bid');
-    
-    // Show toast
-    toast('💰 New bid: $' + data.amount.toLocaleString() + ' on ' + (data.productName?.slice(0,20) || 'item'), 'success');
-    
-    // Update chart with random mock data (in production, use real data)
-    if (bidsChart) {
-      const newData = bidsChart.data.datasets[0].data.map(() => Math.floor(Math.random() * 50) + 10);
-      updateChart(newData);
-    }
-    
+    toast('💰 New bid: $' + data.amount.toLocaleString(), 'success');
+    if (bidsChart) { const newData = bidsChart.data.datasets[0].data.map(() => Math.floor(Math.random() * 50) + 10); updateChart(newData); }
     refreshCurrentPage();
   });
-  
-  // Watchlist outbid notification
-  state.socket.on('you-were-outbid', function(data) {
-    sendNotification('⚠️ You Were Outbid!', `Someone just outbid you on "${data.productName}". Bid now to win!`, 'outbid');
-    addActivity(`⚠️ You were outbid on "${data.productName?.slice(0,30)}${data.productName?.length>30?'…':''}"`, 'bid');
-    toast(`⚠️ Outbid! Someone bid $${data.newAmount} on ${data.productName}`, 'warning');
-  });
 }
 
-// ========== MAIN STATE AND API ==========
-let state = { user: null, token: null, products: [], watchlist: new Set(), socket: null };
+// ========== PRODUCTS ==========
+async function loadProducts() { 
+  if (!state.token) return; 
+  var data = await apiCall('/products'); 
+  if (data.success) { 
+    state.products = data.data; 
+    renderMarketplace(); 
+    renderFeatured(); 
+    updateHeroStats(); 
+    buildTicker(); 
+  } 
+}
 
-function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
-function toast(msg, type) { var icons = { success:'✓', error:'✕', warning:'⚠' }; var el = document.createElement('div'); el.className = 'toast'; el.innerHTML = '<span>' + (icons[type]||'ℹ') + '</span> ' + msg; document.getElementById('toast-stack').appendChild(el); setTimeout(function() { el.remove(); }, 3000); }
+function updateHeroStats() { 
+  var active = state.products.filter(function(p) { return p.isActive; }).length; 
+  var totalBids = state.products.reduce(function(s,p) { return s + (p.bidCount||0); }, 0); 
+  var volume = state.products.reduce(function(s,p) { return s + (p.currentPrice||p.startingPrice); }, 0) / 1000; 
+  document.getElementById('hs1').innerHTML = active; 
+  document.getElementById('hs2').innerHTML = totalBids; 
+  document.getElementById('hs3').innerHTML = Math.floor(volume); 
+}
 
-async function apiCall(endpoint, opts) { var headers = { 'Content-Type': 'application/json' }; if (state.token) headers['Authorization'] = 'Bearer ' + state.token; var res = await fetch('/api' + endpoint, Object.assign({}, opts, { headers: headers })); return res.json(); }
+function buildTicker() { 
+  var html = ''; 
+  state.products.slice(0,10).forEach(function(p) { 
+    html += '<div class="ticker-item"><span>' + (p.emoji||'📦') + '</span><span>' + escapeHtml(p.name.substring(0,30)) + '</span><span class="up">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</span></div>'; 
+  }); 
+  document.getElementById('tickerInner').innerHTML = html + html; 
+}
 
-function checkAuth() { var t = localStorage.getItem('bv_token'); var u = localStorage.getItem('bv_user'); if (t && u) { state.token = t; state.user = JSON.parse(u); showUserUI(); loadProducts(); nav('dashboard'); } else { nav('hero'); } }
+function formatTime(end) { 
+  var diff = new Date(end) - Date.now(); 
+  if (diff <= 0) return 'Ended'; 
+  var h = Math.floor(diff/3600000); 
+  var m = Math.floor((diff%3600000)/60000); 
+  if (h > 23) return Math.floor(h/24) + 'd'; 
+  if (h > 0) return h + 'h ' + m + 'm'; 
+  return m + 'm'; 
+}
 
-function showUserUI() { document.getElementById('navRight').classList.add('hidden'); document.getElementById('navUser').classList.remove('hidden'); document.getElementById('navCenter').style.display = 'flex'; var initials = (state.user.name || 'U').split(' ').map(function(n){ return n[0]; }).join('').slice(0,2).toUpperCase(); document.getElementById('navAvatar').innerHTML = initials; document.getElementById('navName').innerHTML = state.user.name; }
+function makeCard(p, showDel) { 
+  var isLive = p.isActive && new Date(p.endTime) > new Date(); 
+  var ending = isLive && (new Date(p.endTime) - Date.now()) < 3600000; 
+  var watched = state.watchlist.has(p._id); 
+  var badge = !isLive ? 'status-ended' : ending ? 'status-ending' : 'status-live'; 
+  var badgeText = !isLive ? 'Ended' : ending ? 'Ending Soon' : 'Live'; 
+  var initials = p.seller && p.seller.name ? p.seller.name.split(' ').map(function(x){ return x[0]; }).join('').slice(0,2).toUpperCase() : '??'; 
+  return '<div class="auction-card" onclick="openModal(\'' + p._id + '\')"><div class="watch-btn ' + (watched ? 'active' : '') + '" onclick="event.stopPropagation();toggleWatch(\'' + p._id + '\',this)">★</div><div class="card-img"><div class="card-status ' + badge + '">' + badgeText + '</div>' + (p.emoji||'📦') + '</div><div class="card-body"><div class="card-category">' + (p.category||'General') + '</div><div class="card-name">' + escapeHtml(p.name) + '</div><div class="card-price-row"><div><div class="card-price-label">Current</div><div class="card-price">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</div></div><div>' + (p.bidCount||0) + ' bids</div></div><div class="card-footer" style="display:flex;justify-content:space-between;margin-top:0.5rem"><div>' + initials + '</div><div class="card-timer ' + (ending && isLive ? 'urgent' : '') + '" data-end="' + p.endTime + '">' + formatTime(p.endTime) + '</div></div></div></div>'; 
+}
 
-function logout() { localStorage.removeItem('bv_token'); localStorage.removeItem('bv_user'); state.token = null; state.user = null; if(state.socket) state.socket.disconnect(); state.socket = null; document.getElementById('navRight').classList.remove('hidden'); document.getElementById('navUser').classList.add('hidden'); document.getElementById('navCenter').style.display = 'none'; nav('hero'); toast('Signed out', 'info'); }
+function renderMarketplace() { 
+  var prods = state.products.filter(function(p){ return p.isActive; }); 
+  var sort = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'newest'; 
+  if (sort === 'price_asc') prods.sort(function(a,b){ return (a.currentPrice||a.startingPrice) - (b.currentPrice||b.startingPrice); }); 
+  if (sort === 'price_desc') prods.sort(function(a,b){ return (b.currentPrice||b.startingPrice) - (a.currentPrice||a.startingPrice); }); 
+  if (sort === 'bids') prods.sort(function(a,b){ return (b.bidCount||0) - (a.bidCount||0); }); 
+  var grid = document.getElementById('marketplaceGrid'); 
+  if (grid) grid.innerHTML = prods.length ? prods.map(function(p){ return makeCard(p); }).join('') : '<div class="empty-state">No auctions found</div>'; 
+  startTimers(); 
+}
 
-async function doLogin(email, pw) { var data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email: email, password: pw }) }); if (data.success) { state.token = data.token; state.user = data.user; localStorage.setItem('bv_token', data.token); localStorage.setItem('bv_user', JSON.stringify(data.user)); showUserUI(); loadProducts(); nav('dashboard'); toast('Welcome back!', 'success'); connectSocket(); addActivity(`${state.user.name} logged in`, 'product'); } else { toast(data.message || 'Login failed', 'error'); } }
+function renderFeatured() { 
+  var featured = state.products.slice(0,3); 
+  var grid = document.getElementById('featuredGrid'); 
+  if (grid) grid.innerHTML = featured.map(function(p){ return makeCard(p); }).join(''); 
+}
 
-async function doSignup(name, email, pw) { var data = await apiCall('/auth/signup', { method: 'POST', body: JSON.stringify({ name: name, email: email, password: pw }) }); if (data.success) { state.token = data.token; state.user = data.user; localStorage.setItem('bv_token', data.token); localStorage.setItem('bv_user', JSON.stringify(data.user)); showUserUI(); loadProducts(); nav('dashboard'); toast('Account created!', 'success'); connectSocket(); addActivity(`${name} joined BidVault`, 'product'); } else { toast(data.message || 'Signup failed', 'error'); } }
+function renderMyListings() { 
+  if (!state.user) return; 
+  var mine = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); 
+  var grid = document.getElementById('myListingsGrid'); 
+  if (grid) grid.innerHTML = mine.length ? mine.map(function(p){ return makeCard(p, true); }).join('') : '<div class="empty-state"><div class="empty-title">No listings yet</div><button class="btn btn-gold" onclick="nav(\'create\')">Create Auction</button></div>'; 
+}
 
-async function loadProducts() { if (!state.token) return; var data = await apiCall('/products'); if (data.success) { state.products = data.data; renderMarketplace(); renderFeatured(); updateHeroStats(); buildTicker(); } }
+function renderMyBids() { 
+  if (!state.user) return; 
+  var bidOn = state.products.filter(function(p){ return p.bids && p.bids.some(function(b){ return b.bidder && b.bidder._id === state.user._id; }); }); 
+  var grid = document.getElementById('myBidsGrid'); 
+  if (grid) grid.innerHTML = bidOn.length ? bidOn.map(function(p){ return makeCard(p); }).join('') : '<div class="empty-state">No bids placed yet</div>'; 
+}
 
-function updateHeroStats() { var active = state.products.filter(function(p) { return p.isActive; }).length; var totalBids = state.products.reduce(function(s,p) { return s + (p.bidCount||0); }, 0); var volume = state.products.reduce(function(s,p) { return s + (p.currentPrice||p.startingPrice); }, 0) / 1000; document.getElementById('hs1').innerHTML = active; document.getElementById('hs2').innerHTML = totalBids; document.getElementById('hs3').innerHTML = Math.floor(volume); }
-
-function buildTicker() { var html = ''; state.products.slice(0,10).forEach(function(p) { html += '<div class="ticker-item"><span>' + (p.emoji||'📦') + '</span><span>' + escapeHtml(p.name.substring(0,30)) + '</span><span class="up">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</span></div>'; }); document.getElementById('tickerInner').innerHTML = html + html; }
-
-function makeCard(p, showDel) { var isLive = p.isActive && new Date(p.endTime) > new Date(); var ending = isLive && (new Date(p.endTime) - Date.now()) < 3600000; var watched = state.watchlist.has(p._id); var badge = !isLive ? 'status-ended' : ending ? 'status-ending' : 'status-live'; var badgeText = !isLive ? 'Ended' : ending ? 'Ending Soon' : 'Live'; var initials = p.seller && p.seller.name ? p.seller.name.split(' ').map(function(x){ return x[0]; }).join('').slice(0,2).toUpperCase() : '??'; return '<div class="auction-card" onclick="openModal(\'' + p._id + '\')"><div class="watch-btn ' + (watched ? 'active' : '') + '" onclick="event.stopPropagation();toggleWatch(\'' + p._id + '\',this)">★</div><div class="card-img"><div class="card-status ' + badge + '">' + badgeText + '</div>' + (p.emoji||'📦') + '</div><div class="card-body"><div class="card-category">' + (p.category||'General') + '</div><div class="card-name">' + escapeHtml(p.name) + '</div><div class="card-price-row"><div><div class="card-price-label">Current</div><div class="card-price">$' + (p.currentPrice||p.startingPrice).toLocaleString() + '</div></div><div>' + (p.bidCount||0) + ' bids</div></div><div class="card-footer" style="display:flex;justify-content:space-between;margin-top:0.5rem"><div>' + initials + '</div><div class="card-timer ' + (ending && isLive ? 'urgent' : '') + '" data-end="' + p.endTime + '">' + formatTime(p.endTime) + '</div></div></div></div>'; }
-
-function formatTime(end) { var diff = new Date(end) - Date.now(); if (diff <= 0) return 'Ended'; var h = Math.floor(diff/3600000); var m = Math.floor((diff%3600000)/60000); if (h > 23) return Math.floor(h/24) + 'd'; if (h > 0) return h + 'h ' + m + 'm'; return m + 'm'; }
-
-function renderMarketplace() { var prods = state.products.filter(function(p){ return p.isActive; }); var sort = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'newest'; if (sort === 'price_asc') prods.sort(function(a,b){ return (a.currentPrice||a.startingPrice) - (b.currentPrice||b.startingPrice); }); if (sort === 'price_desc') prods.sort(function(a,b){ return (b.currentPrice||b.startingPrice) - (a.currentPrice||a.startingPrice); }); if (sort === 'bids') prods.sort(function(a,b){ return (b.bidCount||0) - (a.bidCount||0); }); var grid = document.getElementById('marketplaceGrid'); if (grid) grid.innerHTML = prods.length ? prods.map(function(p){ return makeCard(p); }).join('') : '<div class="empty-state">No auctions found</div>'; startTimers(); }
-
-function renderFeatured() { var featured = state.products.slice(0,3); var grid = document.getElementById('featuredGrid'); if (grid) grid.innerHTML = featured.map(function(p){ return makeCard(p); }).join(''); }
-
-function renderMyListings() { if (!state.user) return; var mine = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); var grid = document.getElementById('myListingsGrid'); if (grid) grid.innerHTML = mine.length ? mine.map(function(p){ return makeCard(p, true); }).join('') : '<div class="empty-state"><div class="empty-title">No listings yet</div><button class="btn btn-gold" onclick="nav(\'create\')">Create Auction</button></div>'; }
-
-function renderMyBids() { if (!state.user) return; var bidOn = state.products.filter(function(p){ return p.bids && p.bids.some(function(b){ return b.bidder && b.bidder._id === state.user._id; }); }); var grid = document.getElementById('myBidsGrid'); if (grid) grid.innerHTML = bidOn.length ? bidOn.map(function(p){ return makeCard(p); }).join('') : '<div class="empty-state">No bids placed yet</div>'; }
-
-function renderDashboard() { if (!state.user) return; var myListings = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); var kpiHtml = '<div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Active Listings</div><div class="hero-stat-num">' + myListings.filter(function(p){ return p.isActive; }).length + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>My Bids</div><div class="hero-stat-num">' + state.products.filter(function(p){ return p.bids && p.bids.some(function(b){ return b.bidder && b.bidder._id === state.user._id; }); }).length + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Watchlist</div><div class="hero-stat-num">' + state.watchlist.size + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Volume</div><div class="hero-stat-num">$' + (myListings.reduce(function(s,p){ return s + (p.currentPrice||0); },0)/1000).toFixed(0) + 'k</div></div>';
+function renderDashboard() { 
+  if (!state.user) return; 
+  var myListings = state.products.filter(function(p){ return p.seller && p.seller._id === state.user._id; }); 
+  var kpiHtml = '<div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Active Listings</div><div class="hero-stat-num">' + myListings.filter(function(p){ return p.isActive; }).length + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>My Bids</div><div class="hero-stat-num">' + state.products.filter(function(p){ return p.bids && p.bids.some(function(b){ return b.bidder && b.bidder._id === state.user._id; }); }).length + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Watchlist</div><div class="hero-stat-num">' + state.watchlist.size + '</div></div><div class="kpi-card" style="background:var(--ink-2);padding:1.5rem;border-radius:16px"><div>Volume</div><div class="hero-stat-num">$' + (myListings.reduce(function(s,p){ return s + (p.currentPrice||0); },0)/1000).toFixed(0) + 'k</div></div>';
   document.getElementById('kpiGrid').innerHTML = kpiHtml;
-  var listingsDiv = document.getElementById('dashListings'); if (listingsDiv) listingsDiv.innerHTML = myListings.slice(0,3).map(function(p){ return '<div style="margin-bottom:0.5rem">' + escapeHtml(p.name) + ' - $' + (p.currentPrice||p.startingPrice).toLocaleString() + '</div>'; }).join('') || '<p style="color:var(--muted)">No listings yet</p>';
+  var listingsDiv = document.getElementById('dashListings'); 
+  if (listingsDiv) listingsDiv.innerHTML = myListings.slice(0,3).map(function(p){ return '<div style="margin-bottom:0.5rem">' + escapeHtml(p.name) + ' - $' + (p.currentPrice||p.startingPrice).toLocaleString() + '</div>'; }).join('') || '<p style="color:var(--muted)">No listings yet</p>';
 }
 
-async function openModal(id) { var data = await apiCall('/products/' + id); if (!data.success) return; var p = data.data; var isLive = p.isActive && new Date(p.endTime) > Date.now(); document.getElementById('modalPrice').innerHTML = '$' + (p.currentPrice||p.startingPrice).toLocaleString(); document.getElementById('modalDesc').innerHTML = escapeHtml(p.description); document.getElementById('modalImg').innerHTML = p.emoji || '📦'; var statusHtml = '<span class="tag ' + (isLive ? 'tag-green' : 'tag-muted') + '">' + (isLive ? '🟢 LIVE' : '🔴 ENDED') + '</span>'; document.getElementById('modalStatus').innerHTML = statusHtml; var bidSec = document.getElementById('bidSection'); if (isLive && state.user && p.seller && p.seller._id !== state.user._id) { bidSec.classList.remove('hidden'); document.getElementById('bidAmount').dataset.id = id; } else { bidSec.classList.add('hidden'); } var bidsHtml = '<div style="margin-top:1rem"><strong>Bid History (' + (p.bids ? p.bids.length : 0) + ')</strong></div>'; if (p.bids && p.bids.length) { p.bids.slice(0,10).forEach(function(b){ bidsHtml += '<div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--ink-3)"><span>' + escapeHtml(b.bidder.name) + '</span><span>$' + b.amount.toLocaleString() + '</span><span style="font-size:0.7rem">' + new Date(b.createdAt).toLocaleTimeString() + '</span></div>'; }); } else { bidsHtml += '<p style="color:var(--muted)">No bids yet</p>'; } document.getElementById('modalBidHistory').innerHTML = bidsHtml; document.getElementById('productModal').classList.add('open'); }
+async function openModal(id) { 
+  var data = await apiCall('/products/' + id); 
+  if (!data.success) return; 
+  var p = data.data; 
+  var isLive = p.isActive && new Date(p.endTime) > Date.now(); 
+  document.getElementById('modalPrice').innerHTML = '$' + (p.currentPrice||p.startingPrice).toLocaleString(); 
+  document.getElementById('modalDesc').innerHTML = escapeHtml(p.description); 
+  document.getElementById('modalImg').innerHTML = p.emoji || '📦'; 
+  var statusHtml = '<span class="tag ' + (isLive ? 'tag-green' : 'tag-muted') + '">' + (isLive ? '🟢 LIVE' : '🔴 ENDED') + '</span>'; 
+  document.getElementById('modalStatus').innerHTML = statusHtml; 
+  var bidSec = document.getElementById('bidSection'); 
+  if (isLive && state.user && p.seller && p.seller._id !== state.user._id) { 
+    bidSec.classList.remove('hidden'); 
+    document.getElementById('bidAmount').dataset.id = id; 
+  } else { 
+    bidSec.classList.add('hidden'); 
+  } 
+  var bidsHtml = '<div style="margin-top:1rem"><strong>Bid History (' + (p.bids ? p.bids.length : 0) + ')</strong></div>'; 
+  if (p.bids && p.bids.length) { 
+    p.bids.slice(0,10).forEach(function(b){ 
+      bidsHtml += '<div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--ink-3)"><span>' + escapeHtml(b.bidder.name) + '</span><span>$' + b.amount.toLocaleString() + '</span><span style="font-size:0.7rem">' + new Date(b.createdAt).toLocaleTimeString() + '</span></div>'; 
+    }); 
+  } else { 
+    bidsHtml += '<p style="color:var(--muted)">No bids yet</p>'; 
+  } 
+  document.getElementById('modalBidHistory').innerHTML = bidsHtml; 
+  document.getElementById('productModal').classList.add('open'); 
+}
 
-async function submitBid() { if (!state.user) { closeModal(); nav('login'); return; } var id = document.getElementById('bidAmount').dataset.id; var amount = parseFloat(document.getElementById('bidAmount').value); if (!amount) return; var data = await apiCall('/products/' + id + '/bid', { method: 'POST', body: JSON.stringify({ amount: amount }) }); if (data.success) { toast('Bid placed! $' + amount.toLocaleString(), 'success'); addActivity(`You placed a bid of $${amount.toLocaleString()}`, 'bid', amount); loadProducts(); closeModal(); } else { toast(data.message || 'Bid failed', 'error'); } }
+async function submitBid() { 
+  if (!state.user) { closeModal(); nav('login'); return; } 
+  var id = document.getElementById('bidAmount').dataset.id; 
+  var amount = parseFloat(document.getElementById('bidAmount').value); 
+  if (!amount) return; 
+  var data = await apiCall('/products/' + id + '/bid', { method: 'POST', body: JSON.stringify({ amount: amount }) }); 
+  if (data.success) { 
+    toast('Bid placed! $' + amount.toLocaleString(), 'success'); 
+    addActivity(`You placed a bid of $${amount.toLocaleString()}`, 'bid', amount); 
+    loadProducts(); 
+    closeModal(); 
+  } else { 
+    toast(data.message || 'Bid failed', 'error'); 
+  } 
+}
 
-function toggleWatch(id, btn) { if (state.watchlist.has(id)) { state.watchlist.delete(id); btn.classList.remove('active'); toast('Removed from watchlist', 'info'); } else { state.watchlist.add(id); btn.classList.add('active'); toast('Added to watchlist', 'success'); } localStorage.setItem('watchlist_' + (state.user ? state.user._id : ''), JSON.stringify([...state.watchlist])); }
+function toggleWatch(id, btn) { 
+  if (state.watchlist.has(id)) { 
+    state.watchlist.delete(id); 
+    btn.classList.remove('active'); 
+    toast('Removed from watchlist', 'info'); 
+  } else { 
+    state.watchlist.add(id); 
+    btn.classList.add('active'); 
+    toast('Added to watchlist', 'success'); 
+  } 
+  localStorage.setItem('watchlist_' + (state.user ? state.user._id : ''), JSON.stringify([...state.watchlist])); 
+}
 
-function setFilter(f, el) { activeFilter = f; document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); }); if(el) el.classList.add('active'); renderMarketplace(); }
+let activeFilter = 'all';
+function setFilter(f, el) { 
+  activeFilter = f; 
+  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); }); 
+  if(el) el.classList.add('active'); 
+  renderMarketplace(); 
+}
 
-function refreshCurrentPage() { if (document.getElementById('marketplacePage').classList.contains('active')) renderMarketplace(); if (document.getElementById('dashboardPage').classList.contains('active')) renderDashboard(); if (document.getElementById('myListingsPage').classList.contains('active')) renderMyListings(); if (document.getElementById('myBidsPage').classList.contains('active')) renderMyBids(); renderFeatured(); updateHeroStats(); }
+function refreshCurrentPage() { 
+  if (document.getElementById('marketplacePage').classList.contains('active')) renderMarketplace(); 
+  if (document.getElementById('dashboardPage').classList.contains('active')) renderDashboard(); 
+  if (document.getElementById('myListingsPage').classList.contains('active')) renderMyListings(); 
+  if (document.getElementById('myBidsPage').classList.contains('active')) renderMyBids(); 
+  renderFeatured(); 
+  updateHeroStats(); 
+}
 
-function startTimers() { setInterval(function(){ document.querySelectorAll('[data-end]').forEach(function(el){ var end = el.dataset.end; if(end) el.innerHTML = formatTime(end); }); }, 1000); }
+function startTimers() { 
+  setInterval(function(){ 
+    document.querySelectorAll('[data-end]').forEach(function(el){ 
+      var end = el.dataset.end; 
+      if(end) el.innerHTML = formatTime(end); 
+    }); 
+  }, 1000); 
+}
 
-function nav(page) { var pages = ['hero','marketplace','dashboard','myListings','myBids','create','login','signup']; pages.forEach(function(p){ var el = document.getElementById(p + 'Page'); if(el) el.classList.remove('active'); }); document.getElementById(page + 'Page').classList.add('active'); window.scrollTo(0,0); if(page === 'marketplace') renderMarketplace(); if(page === 'dashboard') renderDashboard(); if(page === 'myListings') renderMyListings(); if(page === 'myBids') renderMyBids(); }
+function nav(page) { 
+  var pages = ['hero','marketplace','dashboard','myListings','myBids','create','login','signup']; 
+  pages.forEach(function(p){ 
+    var el = document.getElementById(p + 'Page'); 
+    if(el) el.classList.remove('active'); 
+  }); 
+  document.getElementById(page + 'Page').classList.add('active'); 
+  window.scrollTo(0,0); 
+  if(page === 'marketplace') renderMarketplace(); 
+  if(page === 'dashboard') renderDashboard(); 
+  if(page === 'myListings') renderMyListings(); 
+  if(page === 'myBids') renderMyBids(); 
+}
 
 function closeModal() { document.getElementById('productModal').classList.remove('open'); }
 function demoLogin() { doLogin('demo@example.com', '123456'); }
 
+// ========== EVENT LISTENERS ==========
 document.getElementById('loginForm') && document.getElementById('loginForm').addEventListener('submit', function(e){ e.preventDefault(); doLogin(document.getElementById('liEmail').value, document.getElementById('liPass').value); });
 document.getElementById('signupForm') && document.getElementById('signupForm').addEventListener('submit', function(e){ e.preventDefault(); var name = document.getElementById('suFirst').value + ' ' + document.getElementById('suLast').value; doSignup(name, document.getElementById('suEmail').value, document.getElementById('suPass').value); });
-document.getElementById('createForm') && document.getElementById('createForm').addEventListener('submit', async function(e){ e.preventDefault(); if(!state.user) { nav('login'); return; } var data = await apiCall('/products', { method: 'POST', body: JSON.stringify({ name: document.getElementById('cfTitle').value, description: document.getElementById('cfDesc').value, category: document.getElementById('cfCat').value, emoji: document.getElementById('cfEmoji').value, startingPrice: parseFloat(document.getElementById('cfPrice').value), endTime: new Date(document.getElementById('cfEnd').value).toISOString() }) }); if(data.success) { toast('Auction created!', 'success'); addActivity(`Created new auction: ${document.getElementById('cfTitle').value}`, 'product'); loadProducts(); nav('myListings'); } else { toast('Error creating auction', 'error'); } });
+document.getElementById('createForm') && document.getElementById('createForm').addEventListener('submit', async function(e){ 
+  e.preventDefault(); 
+  if(!state.user) { nav('login'); return; } 
+  var data = await apiCall('/products', { 
+    method: 'POST', 
+    body: JSON.stringify({ 
+      name: document.getElementById('cfTitle').value, 
+      description: document.getElementById('cfDesc').value, 
+      category: document.getElementById('cfCat').value, 
+      emoji: document.getElementById('cfEmoji').value, 
+      startingPrice: parseFloat(document.getElementById('cfPrice').value), 
+      endTime: new Date(document.getElementById('cfEnd').value).toISOString() 
+    }) 
+  }); 
+  if(data.success) { 
+    toast('Auction created!', 'success'); 
+    addActivity(`Created new auction: ${document.getElementById('cfTitle').value}`, 'product'); 
+    loadProducts(); 
+    nav('myListings'); 
+  } else { 
+    toast('Error creating auction', 'error'); 
+  } 
+});
 
-// Custom cursor
+// ========== CURSOR ==========
 document.addEventListener('mousemove', function(e){ var c = document.getElementById('cursor'); if(c) c.style.transform = 'translate(' + e.clientX + 'px, ' + e.clientY + 'px)'; });
 document.addEventListener('mouseover', function(e){ var hov = e.target.closest('a,button,.btn,.auction-card'); document.body.classList.toggle('cursor-hover', !!hov); });
 
+// ========== INIT ==========
 setTimeout(function(){ document.getElementById('loader').classList.add('out'); }, 1500);
 initChart();
 checkAuth();
 startTimers();
 
-// Add sample activity for demo
 setTimeout(() => {
   addActivity('Welcome to BidVault! Start bidding now.', 'product');
   addActivity('🔥 Hot auction: Vintage Rolex Submariner', 'product');
